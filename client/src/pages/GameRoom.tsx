@@ -113,7 +113,7 @@ function ShowHandControls({ state }: { state: RoomState }) {
   const allShown = cards.every((_, i) => shown.includes(i));
 
   return (
-    <div className="flex items-center justify-center gap-2 py-1 text-sm">
+    <div className="flex flex-wrap items-center justify-center gap-2 py-1 text-sm">
       <span className="text-ink-dim">Show:</span>
       {cards.map((c, i) => (
         <button key={i} disabled={shown.includes(i)} onClick={() => api.showCards([i])} className="btn btn-ghost px-3 py-1.5">
@@ -123,7 +123,7 @@ function ShowHandControls({ state }: { state: RoomState }) {
         </button>
       ))}
       <button disabled={allShown} onClick={() => api.showCards(cards.map((_, i) => i))} className="btn btn-gold px-3 py-1.5">
-        Show both
+        {cards.length === 2 ? 'Show both' : `Show all (${cards.length})`}
       </button>
     </div>
   );
