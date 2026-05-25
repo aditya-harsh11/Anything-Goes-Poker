@@ -78,7 +78,7 @@ export class PokerGame {
   private actedThisStreet = new Set<string>();
   private lastActedBet = new Map<string, number>();
   private selections = new Map<string, number[]>();
-  private discardDone = false;
+  private discardTarget = 0;
   private complete = false;
 
   constructor(
@@ -437,6 +437,10 @@ export class PokerGame {
     }
   }
 
+  private streetIndex(): number {
+    return this.phase === 'flop' ? 0 : this.phase === 'turn' ? 1 : 2;
+  }
+
   private startNextStreet(): void {
     for (;;) {
       if (this.phase === 'river') {
@@ -444,35 +448,44 @@ export class PokerGame {
         return;
       }
       this.dealNextStreet();
-      // Crazy Pineapple: after the flop, pause for everyone to discard before betting.
-      if (this.phase === 'flop' && this.variant.discardAfterFlop > 0 && !this.discardDone) {
+      // Pineapple variants: pause for everyone to discard before betting on this street.
+      const idx = this.streetIndex();
+      const discard = this.variant.discardSchedule[idx] ?? 0;
+      if (discard > 0) {
+        const cumulative = this.variant.discardSchedule.slice(0, idx + 1).reduce((a, b) => a + b, 0);
+        this.discardTarget = this.variant.holeCards - cumulative;
         this.awaitingDiscard = true;
         return;
       }
-      this.resetStreetBetting();
-      if (this.ableToAct().length >= 2) {
-        this.toActIndex = this.nextUnsettledIndex(this.buttonIndex);
-        if (this.toActIndex !== null) return;
-      }
+      if (this.openBetting()) return;
       // Nobody (or only one) can act this street — deal the next one (all-in run-out).
     }
   }
 
-  private targetHoleCards(): number {
-    return this.variant.holeCards - this.variant.discardAfterFlop;
+  /** Reset and open betting for the current street; false if no betting is possible. */
+  private openBetting(): boolean {
+    this.resetStreetBetting();
+    if (this.ableToAct().length >= 2) {
+      const idx = this.nextUnsettledIndex(this.buttonIndex);
+      if (idx !== null) {
+        this.toActIndex = idx;
+        return true;
+      }
+    }
+    return false;
   }
 
-  /** Crazy Pineapple: a player discards one of their hole cards after the flop. */
+  /** Pineapple variants: a player discards one hole card on the current street. */
   submitDiscard(playerId: string, index: number): ActionResult {
     if (!this.awaitingDiscard) return { ok: false, error: 'no discard expected' };
     const p = this.seats.find((s) => s.id === playerId);
     if (!p || p.status === 'folded') return { ok: false, error: 'not in the hand' };
-    if (p.holeCards.length <= this.targetHoleCards()) return { ok: false, error: 'already discarded' };
+    if (p.holeCards.length <= this.discardTarget) return { ok: false, error: 'already discarded' };
     if (!Number.isInteger(index) || index < 0 || index >= p.holeCards.length) {
       return { ok: false, error: 'bad card index' };
     }
     p.holeCards.splice(index, 1);
-    if (this.contenders().every((c) => c.holeCards.length <= this.targetHoleCards())) {
+    if (this.contenders().every((c) => c.holeCards.length <= this.discardTarget)) {
       this.resumeAfterDiscard();
     }
     return { ok: true };
@@ -481,21 +494,13 @@ export class PokerGame {
   mustDiscard(playerId: string): boolean {
     if (!this.awaitingDiscard) return false;
     const p = this.seats.find((s) => s.id === playerId);
-    return !!p && p.status !== 'folded' && p.holeCards.length > this.targetHoleCards();
+    return !!p && p.status !== 'folded' && p.holeCards.length > this.discardTarget;
   }
 
   private resumeAfterDiscard(): void {
-    this.discardDone = true;
     this.awaitingDiscard = false;
-    this.resetStreetBetting();
-    if (this.ableToAct().length >= 2) {
-      const idx = this.nextUnsettledIndex(this.buttonIndex);
-      if (idx !== null) {
-        this.toActIndex = idx;
-        return;
-      }
-    }
-    // No flop betting possible (all-in run-out) — continue dealing the remaining streets.
+    if (this.openBetting()) return;
+    // No betting possible (all-in run-out) — continue dealing the remaining streets.
     this.startNextStreet();
   }
 
@@ -676,7 +681,7 @@ export class PokerGame {
     if (this.awaitingDiscard) {
       // Auto-discard the trailing card(s) for anyone who hasn't.
       for (const p of this.contenders()) {
-        while (p.holeCards.length > this.targetHoleCards()) p.holeCards.pop();
+        while (p.holeCards.length > this.discardTarget) p.holeCards.pop();
       }
       this.resumeAfterDiscard();
       return;

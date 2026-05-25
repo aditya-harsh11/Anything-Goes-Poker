@@ -5,6 +5,7 @@ export type Variant =
   | 'two-or-three'
   | 'all-five'
   | 'one-three-five'
+  | 'pineapple'
   | 'crazy-pineapple'
   | 'bomb-holdem'
   | 'bomb-omaha'
@@ -20,8 +21,8 @@ export interface VariantConfig {
   allowedHoleCounts: number[];
   /** If true, players manually choose which hole cards to use at showdown. */
   manualSelect: boolean;
-  /** Cards each player must discard after the flop is dealt (0 = none). */
-  discardAfterFlop: number;
+  /** Cards to discard after [flop, turn, river] — for Pineapple variants. */
+  discardSchedule: number[];
   /** Bomb pot: ante instead of blinds, no preflop, two boards, pot split per board. */
   bombPot: boolean;
   /** Blackjack Hold'em: split 4 cards into 2 for poker + 2 for blackjack; pot split 50/50. */
@@ -37,7 +38,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 2,
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -49,7 +50,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 4,
     allowedHoleCounts: [2],
     manualSelect: true,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'pot-limit',
@@ -61,7 +62,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 4,
     allowedHoleCounts: [0, 1, 2, 3, 4],
     manualSelect: true,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -73,7 +74,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 5,
     allowedHoleCounts: [2, 3],
     manualSelect: true,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -85,7 +86,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 5,
     allowedHoleCounts: [0, 1, 2, 3, 4, 5],
     manualSelect: true,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -97,7 +98,19 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 5,
     allowedHoleCounts: [1, 3, 5],
     manualSelect: true,
-    discardAfterFlop: 0,
+    discardSchedule: [],
+    bombPot: false,
+    blackjack: false,
+    bettingStructure: 'no-limit',
+  },
+  pineapple: {
+    id: 'pineapple',
+    name: 'Pineapple',
+    description: '3 hole cards. Discard 1 after the flop, then play like Hold’em.',
+    holeCards: 3,
+    allowedHoleCounts: [0, 1, 2],
+    manualSelect: false,
+    discardSchedule: [1],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -105,11 +118,11 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
   'crazy-pineapple': {
     id: 'crazy-pineapple',
     name: 'Crazy Pineapple',
-    description: '3 hole cards. Discard 1 after the flop, then play like Hold’em.',
-    holeCards: 3,
+    description: '5 hole cards. Discard 1 after the flop, the turn, and the river — down to 2.',
+    holeCards: 5,
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
-    discardAfterFlop: 1,
+    discardSchedule: [1, 1, 1],
     bombPot: false,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -121,7 +134,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 2,
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: true,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -133,7 +146,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 4,
     allowedHoleCounts: [2],
     manualSelect: false,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: true,
     blackjack: false,
     bettingStructure: 'no-limit',
@@ -145,7 +158,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 4,
     allowedHoleCounts: [2],
     manualSelect: true,
-    discardAfterFlop: 0,
+    discardSchedule: [],
     bombPot: false,
     blackjack: true,
     bettingStructure: 'no-limit',

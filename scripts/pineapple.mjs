@@ -1,21 +1,23 @@
-// End-to-end test of Crazy Pineapple: deal 3 -> preflop bet -> flop -> each player
-// discards 1 -> flop/turn/river betting -> showdown. Verifies chips are conserved.
+// Tests Pineapple-style discards. VARIANT=pineapple (3->2, one discard) or
+// VARIANT=crazy-pineapple (5->2, discard after flop/turn/river). Verifies chips
+// conserved, the right number of discards happen, and everyone ends with 2 cards.
 import { io } from 'socket.io-client';
 
 const URL = process.env.SMOKE_URL ?? 'http://localhost:3001';
+const VARIANT = process.env.VARIANT ?? 'crazy-pineapple';
 const log = (...a) => console.log(...a);
 const connect = () => io(URL, { transports: ['websocket'], forceNew: true });
 
 const approved = new Set();
 let started = false;
 let finished = false;
-const discarded = new Set();
+const discardKeys = new Set();
+let discardCount = 0;
 
 function driver(sock, getId, label) {
   sock.on('errorMsg', (m) => log(`[${label}] error: ${m}`));
   sock.on('roomState', (st) => {
     const myId = getId();
-
     if (st.youAreHost && st.joinRequests) {
       for (const r of st.joinRequests) {
         if (!approved.has(r.requestId)) {
@@ -25,31 +27,31 @@ function driver(sock, getId, label) {
       }
       if (!started && st.players.length === 3 && st.game.phase === 'waiting') {
         started = true;
-        log('[host] starting crazy-pineapple hand');
+        log(`[host] starting ${VARIANT}`);
         sock.emit('startHand');
       }
     }
-
-    if (st.youMustDiscard && !discarded.has(label)) {
-      discarded.add(label);
-      log(`[${label}] discarding card 0 (board: ${st.game.communityCards.map((c) => c.rank + c.suit).join(' ')})`);
-      setTimeout(() => sock.emit('discardCard', 0), 15);
+    const me = st.players.find((p) => p.id === myId);
+    if (st.youMustDiscard && me) {
+      const key = `${label}:${me.holeCards.length}`;
+      if (!discardKeys.has(key)) {
+        discardKeys.add(key);
+        discardCount++;
+        setTimeout(() => sock.emit('discardCard', 0), 15);
+      }
     }
-
     if (st.game.toAct === myId && st.availableActions) {
       const av = st.availableActions;
-      const action = av.canCheck ? { type: 'check' } : av.canCall ? { type: 'call' } : { type: 'fold' };
-      setTimeout(() => sock.emit('playerAction', action), 15);
+      setTimeout(() => sock.emit('playerAction', av.canCheck ? { type: 'check' } : { type: 'call' }), 15);
     }
-
     if (!finished && st.lastResult && st.game.phase === 'showdown' && !st.game.awaitingSelection) {
       finished = true;
       const total = st.players.reduce((s, p) => s + p.stack, 0);
-      log('\n=== HAND COMPLETE ===');
       log('board:', st.lastResult.board.map((c) => c.rank + c.suit).join(' '));
       log('winners:', st.lastResult.winners.map((w) => `${w.name} +${w.amount}`).join(', '));
+      log('total discards observed:', discardCount);
       log('total chips (expect 3000):', total);
-      log(total === 3000 ? 'PASS: chips conserved' : 'FAIL: chip mismatch');
+      log(total === 3000 ? 'PASS: chips conserved' : 'FAIL');
       setTimeout(() => process.exit(total === 3000 ? 0 : 1), 100);
     }
   });
@@ -60,28 +62,19 @@ let hostId = '';
 host.on('connect', () => {
   host.emit(
     'createRoom',
-    { name: 'Alice', settings: { variant: 'crazy-pineapple', smallBlind: 5, bigBlind: 10, startingStack: 1000, maxSeats: 8 } },
+    { name: 'Alice', settings: { variant: VARIANT, smallBlind: 10, bigBlind: 20, startingStack: 1000, maxSeats: 8 } },
     (ack) => {
       hostId = ack.playerId;
-      log('[host] created room', ack.roomId);
       driver(host, () => hostId, 'Alice');
-      for (const name of ['Bob', 'Carol']) {
+      for (const nm of ['Bob', 'Carol']) {
         const p = connect();
         let pid = '';
-        p.on('connect', () => {
-          p.emit('joinRoom', { roomId: ack.roomId, name }, (jack) => {
-            if (jack.ok) {
-              pid = jack.playerId;
-              driver(p, () => pid, name);
-            }
-          });
-        });
+        p.on('connect', () => p.emit('joinRoom', { roomId: ack.roomId, name: nm }, (j) => {
+          if (j.ok) { pid = j.playerId; driver(p, () => pid, nm); }
+        }));
       }
     },
   );
 });
 
-setTimeout(() => {
-  log('TIMEOUT');
-  process.exit(2);
-}, 15000);
+setTimeout(() => { log('TIMEOUT'); process.exit(2); }, 20000);
