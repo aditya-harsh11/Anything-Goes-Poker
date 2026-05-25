@@ -1,12 +1,15 @@
 import { io, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '@poker/shared';
 
-// Connect straight to the game server (port 3001) on whatever host the page was
-// loaded from — works for localhost and for LAN play (e.g. http://192.168.x.x:5173).
-// This avoids relying on the Vite dev proxy for the websocket, which can drop.
-const SERVER_URL = `${window.location.protocol}//${window.location.hostname}:3001`;
+// Where to reach the game server:
+//  - VITE_SERVER_URL wins (set it for a split client/server deploy)
+//  - dev: the same host on port 3001 (the server runs separately from Vite)
+//  - prod: same origin (the Node server serves this build and the socket)
+const serverUrl =
+  import.meta.env.VITE_SERVER_URL ??
+  (import.meta.env.DEV ? `${window.location.protocol}//${window.location.hostname}:3001` : undefined);
 
-export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(SERVER_URL, {
+export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(serverUrl, {
   autoConnect: true,
   transports: ['websocket', 'polling'],
 });
