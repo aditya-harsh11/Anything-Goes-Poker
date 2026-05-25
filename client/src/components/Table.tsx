@@ -138,7 +138,10 @@ export default function Table({ state }: Props) {
       <div className="felt absolute inset-[8%] rounded-[50%]" />
 
       {/* center: community cards + pot */}
-      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3">
+      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2">
+        {game.communityCards2.length > 0 && (
+          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-100/70">Board A</span>
+        )}
         <div className="flex gap-2">
           {game.communityCards.length > 0
             ? game.communityCards.map((c, i) => <PlayingCard key={i} card={c} size="lg" />)
@@ -146,8 +149,16 @@ export default function Table({ state }: Props) {
                 {game.phase === 'waiting' ? 'Waiting for next hand' : ''}
               </span>}
         </div>
+        {game.communityCards2.length > 0 && (
+          <>
+            <span className="mt-1 text-xs font-semibold uppercase tracking-wide text-emerald-100/70">Board B</span>
+            <div className="flex gap-2">
+              {game.communityCards2.map((c, i) => <PlayingCard key={i} card={c} size="lg" />)}
+            </div>
+          </>
+        )}
         {game.totalPot > 0 && (
-          <div className="rounded-full bg-black/40 px-4 py-1 text-sm font-semibold text-yellow-200">
+          <div className="mt-1 rounded-full bg-black/40 px-4 py-1 text-sm font-semibold text-yellow-200">
             Pot: {game.totalPot.toLocaleString()}
           </div>
         )}

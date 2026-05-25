@@ -18,9 +18,10 @@ function ResultBanner({ state }: { state: RoomState }) {
       {r.winners.length === 0 ? (
         <span className="text-slate-300">Hand complete</span>
       ) : (
-        r.winners.map((w) => (
-          <span key={w.playerId} className="mr-3 font-semibold text-yellow-300">
+        r.winners.map((w, i) => (
+          <span key={`${w.playerId}-${w.board ?? ''}-${i}`} className="mr-3 font-semibold text-yellow-300">
             {w.name} wins {w.amount.toLocaleString()}
+            {w.board ? ` (Board ${w.board})` : ''}
           </span>
         ))
       )}

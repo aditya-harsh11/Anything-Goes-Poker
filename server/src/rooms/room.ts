@@ -317,6 +317,7 @@ export class Room {
     return {
       phase: 'waiting',
       communityCards: [],
+      communityCards2: [],
       pots: [],
       totalPot: 0,
       currentBet: 0,

@@ -65,6 +65,8 @@ export interface PotInfo {
 export interface PublicGameState {
   phase: GamePhase;
   communityCards: Card[];
+  /** Bomb pots: the second board (otherwise empty). */
+  communityCards2: Card[];
   pots: PotInfo[];
   totalPot: number;
   /** Highest committedThisRound among players — the amount to match. */
@@ -92,7 +94,9 @@ export interface JoinRequest {
 export interface HandResult {
   handNumber: number;
   board: Card[];
-  winners: { playerId: string; name: string; amount: number; handName?: string }[];
+  /** Bomb pots: the second board. */
+  board2?: Card[];
+  winners: { playerId: string; name: string; amount: number; handName?: string; board?: 'A' | 'B' }[];
   /** Hands shown at showdown (omitted when a hand ends by everyone folding). */
   revealed: { playerId: string; name: string; holeCards: Card[]; handName: string }[];
 }

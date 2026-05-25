@@ -44,6 +44,8 @@ export interface ActionResult {
 export class PokerGame {
   phase: GamePhase = 'preflop';
   board: Card[] = [];
+  /** Bomb pots: the second board. */
+  board2: Card[] = [];
   handNumber: number;
   lastResult: HandResult | null = null;
   smallBlindSeat = -1;
@@ -97,12 +99,45 @@ export class PokerGame {
       p.lastAction = undefined;
     }
 
-    this.postBlinds();
-    this.deal();
-    this.openPreflopBetting();
+    if (this.variant.bombPot) {
+      this.deal();
+      this.postAntes();
+      this.dealBombFlops();
+      this.openFlopBetting();
+    } else {
+      this.postBlinds();
+      this.deal();
+      this.openPreflopBetting();
+    }
   }
 
   // ---- setup --------------------------------------------------------------
+
+  /** Bomb pots: everyone antes straight into the pot (no blinds, no preflop). */
+  private postAntes(): void {
+    const ante = this.bb;
+    for (const p of this.seats) {
+      const pay = Math.min(ante, p.stack);
+      p.stack -= pay;
+      p.totalCommitted += pay;
+      p.lastAction = 'Ante';
+      if (p.stack === 0) p.status = 'allin';
+    }
+    this.currentBet = 0;
+    this.minRaise = this.bb;
+    this.lastFullRaiseBet = 0;
+  }
+
+  private dealBombFlops(): void {
+    this.phase = 'flop';
+    this.board.push(...this.deck.drawMany(3));
+    this.board2.push(...this.deck.drawMany(3));
+  }
+
+  private openFlopBetting(): void {
+    this.toActIndex = this.nextUnsettledIndex(this.buttonIndex);
+    if (this.toActIndex === null) this.endRound();
+  }
 
   private postBlinds(): void {
     const n = this.seats.length;
@@ -241,6 +276,7 @@ export class PokerGame {
     return {
       phase: this.phase,
       communityCards: this.board,
+      communityCards2: this.board2,
       pots,
       totalPot: this.potTotal(),
       currentBet: this.currentBet,
@@ -444,15 +480,19 @@ export class PokerGame {
   }
 
   private dealNextStreet(): void {
+    const bomb = this.variant.bombPot;
     if (this.phase === 'preflop') {
       this.phase = 'flop';
       this.board.push(...this.deck.drawMany(3));
+      if (bomb) this.board2.push(...this.deck.drawMany(3));
     } else if (this.phase === 'flop') {
       this.phase = 'turn';
       this.board.push(this.deck.draw());
+      if (bomb) this.board2.push(this.deck.draw());
     } else if (this.phase === 'turn') {
       this.phase = 'river';
       this.board.push(this.deck.draw());
+      if (bomb) this.board2.push(this.deck.draw());
     }
   }
 
@@ -489,12 +529,94 @@ export class PokerGame {
     this.phase = 'showdown';
     this.toActIndex = null;
     const contenders = this.contenders();
+    if (this.variant.bombPot) {
+      this.resolveBombShowdown(contenders);
+      return;
+    }
     if (this.variant.manualSelect && contenders.length > 1) {
       // Pause for players to choose which hole cards to use.
       this.awaitingSelection = true;
       return;
     }
     this.resolveAutoShowdown(contenders);
+  }
+
+  /** Bomb pot: split each pot in half between the best hand on each of the two boards. */
+  private resolveBombShowdown(contenders: HandPlayer[]): void {
+    const counts = this.variant.allowedHoleCounts;
+    const solvedA = new Map<string, SolvedHand>();
+    const solvedB = new Map<string, SolvedHand>();
+    for (const p of contenders) {
+      solvedA.set(p.id, { id: p.id, hand: bestSelection(p.holeCards, this.board, counts).hand });
+      solvedB.set(p.id, { id: p.id, hand: bestSelection(p.holeCards, this.board2, counts).hand });
+    }
+
+    const contribs: Contribution[] = this.seats.map((p) => ({
+      id: p.id,
+      amount: p.totalCommitted,
+      folded: p.status === 'folded',
+    }));
+    const pots = buildPots(contribs);
+
+    const winsA = new Map<string, number>();
+    const winsB = new Map<string, number>();
+    for (const pot of pots) {
+      const halfA = Math.ceil(pot.amount / 2); // odd chip goes to board A
+      const halfB = pot.amount - halfA;
+      this.awardBombHalf(pot.eligible, solvedA, halfA, winsA);
+      this.awardBombHalf(pot.eligible, solvedB, halfB, winsB);
+    }
+
+    const apply = (m: Map<string, number>) => {
+      for (const [id, amt] of m) {
+        const p = this.seats.find((s) => s.id === id);
+        if (p) p.stack += amt;
+      }
+    };
+    apply(winsA);
+    apply(winsB);
+
+    const nameOf = (id: string) => this.seats.find((s) => s.id === id)?.name ?? '';
+    const winners: HandResult['winners'] = [
+      ...[...winsA.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, board: 'A' as const })),
+      ...[...winsB.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, board: 'B' as const })),
+    ];
+
+    this.phase = 'showdown';
+    this.toActIndex = null;
+    this.complete = true;
+    this.lastResult = {
+      handNumber: this.handNumber,
+      board: this.board,
+      board2: this.board2,
+      winners,
+      revealed: [],
+    };
+  }
+
+  private awardBombHalf(
+    eligibleIds: string[],
+    solved: Map<string, SolvedHand>,
+    amount: number,
+    out: Map<string, number>,
+  ): void {
+    if (amount <= 0) return;
+    const eligible = eligibleIds
+      .map((id) => solved.get(id))
+      .filter((s): s is SolvedHand => !!s);
+    const winnerIds = winnersAmong(eligible);
+    if (winnerIds.length === 0) return;
+    const ordered = this.orderByPosition(winnerIds);
+    const base = Math.floor(amount / ordered.length);
+    let remainder = amount - base * ordered.length;
+    for (const id of ordered) {
+      let share = base;
+      if (remainder > 0) {
+        share += 1;
+        remainder -= 1;
+      }
+      out.set(id, (out.get(id) ?? 0) + share);
+    }
   }
 
   /** Auto showdown (Texas): engine forms the best hand for each contender. */

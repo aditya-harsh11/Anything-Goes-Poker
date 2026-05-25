@@ -5,7 +5,9 @@ export type Variant =
   | 'two-or-three'
   | 'all-five'
   | 'one-three-five'
-  | 'crazy-pineapple';
+  | 'crazy-pineapple'
+  | 'bomb-holdem'
+  | 'bomb-omaha';
 
 export interface VariantConfig {
   id: Variant;
@@ -19,6 +21,8 @@ export interface VariantConfig {
   manualSelect: boolean;
   /** Cards each player must discard after the flop is dealt (0 = none). */
   discardAfterFlop: number;
+  /** Bomb pot: ante instead of blinds, no preflop, two boards, pot split per board. */
+  bombPot: boolean;
   bettingStructure: 'no-limit' | 'pot-limit';
 }
 
@@ -31,6 +35,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
     discardAfterFlop: 0,
+    bombPot: false,
     bettingStructure: 'no-limit',
   },
   plo: {
@@ -41,6 +46,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [2],
     manualSelect: true,
     discardAfterFlop: 0,
+    bombPot: false,
     bettingStructure: 'pot-limit',
   },
   'dirty-omaha': {
@@ -51,6 +57,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [0, 1, 2, 3, 4],
     manualSelect: true,
     discardAfterFlop: 0,
+    bombPot: false,
     bettingStructure: 'no-limit',
   },
   'two-or-three': {
@@ -61,6 +68,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [2, 3],
     manualSelect: true,
     discardAfterFlop: 0,
+    bombPot: false,
     bettingStructure: 'no-limit',
   },
   'all-five': {
@@ -71,6 +79,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [0, 1, 2, 3, 4, 5],
     manualSelect: true,
     discardAfterFlop: 0,
+    bombPot: false,
     bettingStructure: 'no-limit',
   },
   'one-three-five': {
@@ -81,6 +90,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [1, 3, 5],
     manualSelect: true,
     discardAfterFlop: 0,
+    bombPot: false,
     bettingStructure: 'no-limit',
   },
   'crazy-pineapple': {
@@ -91,6 +101,29 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
     discardAfterFlop: 1,
+    bombPot: false,
+    bettingStructure: 'no-limit',
+  },
+  'bomb-holdem': {
+    id: 'bomb-holdem',
+    name: 'Bomb Pot (Hold’em)',
+    description: 'Everyone antes, no preflop, two boards. Pot splits per board — scoop both to win it all.',
+    holeCards: 2,
+    allowedHoleCounts: [0, 1, 2],
+    manualSelect: false,
+    discardAfterFlop: 0,
+    bombPot: true,
+    bettingStructure: 'no-limit',
+  },
+  'bomb-omaha': {
+    id: 'bomb-omaha',
+    name: 'Bomb Pot (Omaha)',
+    description: 'Antes, no preflop, two boards. 4 cards, use exactly 2 per board.',
+    holeCards: 4,
+    allowedHoleCounts: [2],
+    manualSelect: false,
+    discardAfterFlop: 0,
+    bombPot: true,
     bettingStructure: 'no-limit',
   },
 };
