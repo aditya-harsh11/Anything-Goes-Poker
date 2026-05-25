@@ -1,5 +1,6 @@
 import { type RoomState, type Variant, VARIANT_LIST, VARIANTS } from '@poker/shared';
 import { api } from '../lib/api';
+import Dropdown from './Dropdown';
 
 interface Props {
   state: RoomState;
@@ -25,19 +26,14 @@ export default function HostPanel({ state }: Props) {
       <div>
         <h2 className={heading}>Host controls</h2>
         <label className={label}>Variant — next hand</label>
-        <select
-          value={settings.variant}
-          disabled={handInProgress}
-          onChange={(e) => api.setVariant(e.target.value as Variant)}
-          style={{ colorScheme: 'dark' }}
-          className="mb-1 w-full rounded-xl border border-brass/50 bg-emerald-900/50 px-3 py-2 text-sm font-semibold text-brass-bright outline-none focus:ring-2 focus:ring-brass/40 disabled:opacity-50"
-        >
-          {VARIANT_LIST.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
+        <div className="mb-1">
+          <Dropdown
+            value={settings.variant}
+            disabled={handInProgress}
+            onChange={(v) => api.setVariant(v as Variant)}
+            options={VARIANT_LIST.map((v) => ({ value: v.id, label: v.name }))}
+          />
+        </div>
         <p className="mb-3 text-xs text-ink-dim">{VARIANTS[settings.variant].description}</p>
 
         {game.handNumber === 0 && (

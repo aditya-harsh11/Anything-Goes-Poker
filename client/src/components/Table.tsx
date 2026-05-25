@@ -32,6 +32,7 @@ function Seat({
   isSmallBlind,
   isBigBlind,
   hideCards,
+  selection,
 }: {
   player: PublicPlayer;
   isYou: boolean;
@@ -40,20 +41,17 @@ function Seat({
   isSmallBlind: boolean;
   isBigBlind: boolean;
   hideCards: boolean;
+  selection?: number[];
 }) {
   const badge = statusBadge(player);
   const dimmed = player.status === 'folded' || player.status === 'sittingout';
   const visible = player.holeCards ?? [];
 
-  let faceCards: Card[] = [];
-  let backCount = 0;
-  if (isYou) {
-    faceCards = hideCards ? [] : visible;
-  } else {
-    faceCards = visible;
-    backCount = player.cardBacks;
-  }
-  const hasCards = faceCards.length > 0 || backCount > 0;
+  // Only ever render face-up cards (your own, or others' revealed cards). No face-down backs.
+  const faceCards: Card[] = isYou ? (hideCards ? [] : visible) : visible;
+  const hasCards = faceCards.length > 0;
+  const sel = isYou ? selection : undefined;
+  const hasSel = !!sel && sel.length > 0;
 
   return (
     <div
@@ -63,8 +61,16 @@ function Seat({
     >
       {hasCards && (
         <div className="flex min-h-11 items-center justify-center gap-0.5">
-          {faceCards.map((c, i) => <PlayingCard key={`v${i}`} card={c} size={isYou ? 'sm' : 'xs'} />)}
-          {Array.from({ length: backCount }).map((_, i) => <PlayingCard key={`b${i}`} hidden size="xs" />)}
+          {faceCards.map((c, i) => (
+            <div
+              key={i}
+              className={`rounded ${hasSel && !sel!.includes(i) ? 'opacity-35' : ''} ${
+                hasSel && sel!.includes(i) ? 'ring-2 ring-emerald-400' : ''
+              }`}
+            >
+              <PlayingCard card={c} size={isYou ? 'sm' : 'xs'} />
+            </div>
+          ))}
         </div>
       )}
 
@@ -151,6 +157,7 @@ export default function Table({ state, reactions }: Props) {
             isSmallBlind={game.smallBlindSeat === player.seat}
             isBigBlind={game.bigBlindSeat === player.seat}
             hideCards={player.id === youId && choosing}
+            selection={player.id === youId ? state.yourSelection : undefined}
           />
         ) : (
           <div className="flex h-20 w-32 items-center justify-center rounded-2xl border-2 border-dashed border-brass/25 text-xs text-ink-dim/70">

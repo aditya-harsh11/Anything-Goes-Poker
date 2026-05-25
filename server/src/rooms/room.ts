@@ -433,6 +433,8 @@ export class Room {
       if (this.game.mustDiscard(viewerId)) {
         state.youMustDiscard = true;
       }
+      const sel = this.game.getSelection(viewerId);
+      if (sel) state.yourSelection = sel;
       const note = this.game.notes.get(viewerId);
       if (note) state.youNote = note;
     }

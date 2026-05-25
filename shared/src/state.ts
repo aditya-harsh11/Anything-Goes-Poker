@@ -126,6 +126,8 @@ export interface RoomState {
   youMustSelect?: boolean;
   /** True when the recipient must discard a card after the flop (Crazy Pineapple). */
   youMustDiscard?: boolean;
+  /** The hole-card indices the recipient locked in this hand (so they can see their picks). */
+  yourSelection?: number[];
   /** Private coaching note for the recipient, e.g. "you could have made a flush". */
   youNote?: string;
   /** Only populated for the host. */

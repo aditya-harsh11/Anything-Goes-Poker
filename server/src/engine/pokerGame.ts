@@ -235,6 +235,10 @@ export class PokerGame {
     return this.selections.has(id);
   }
 
+  getSelection(id: string): number[] | undefined {
+    return this.selections.get(id);
+  }
+
   availableActionsFor(playerId: string): AvailableActions | null {
     if (this.complete || this.toActIndex === null) return null;
     const p = this.seats[this.toActIndex];
@@ -696,9 +700,10 @@ export class PokerGame {
       const hand = handFromSelection(p.holeCards, sel, this.board);
       solved.set(p.id, { id: p.id, hand });
 
-      // Advisor: privately note if a stronger hand was available.
+      // Advisor: privately note if a meaningfully stronger hand was available
+      // (skip kicker-only improvements, which would read as the same hand name).
       const best = bestSelection(p.holeCards, this.board, this.variant.allowedHoleCounts);
-      if (compareHands(best.hand, hand) > 0) {
+      if (compareHands(best.hand, hand) > 0 && describe(best.hand) !== describe(hand)) {
         this.notes.set(p.id, `You played ${describe(hand)} — you could have made ${describe(best.hand)}.`);
       }
     }
