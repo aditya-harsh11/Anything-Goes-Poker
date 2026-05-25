@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SUIT_SYMBOL, VARIANTS, selectionHint, type RoomState } from '@poker/shared';
+import { SUIT_SYMBOL, VARIANTS, REACTIONS, selectionHint, type RoomState } from '@poker/shared';
 import { socket } from '../lib/socket';
 import { useRoom } from '../lib/useRoom';
 import { joinRoom, rejoin, api } from '../lib/api';
@@ -62,7 +62,10 @@ function PlayerHand({ state }: { state: RoomState }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-2 py-2">
+    <div className="flex flex-col items-center gap-1 py-2">
+      {mode === 'none' && (
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Your hand</span>
+      )}
       <div className="flex items-end gap-2">
         {cards.map((card, i) => {
           const selected = sel.includes(i);
@@ -74,7 +77,7 @@ function PlayerHand({ state }: { state: RoomState }) {
                 selected ? `-translate-y-2 rounded-lg ring-4 ${ringColor}` : ''
               }`}
             >
-              <PlayingCard card={card} size="lg" />
+              <PlayingCard card={card} size="md" />
             </button>
           );
         })}
@@ -191,6 +194,23 @@ function Ledger({ state, onClose }: { state: RoomState; onClose: () => void }) {
   );
 }
 
+function ReactionBar() {
+  return (
+    <div className="flex items-center justify-center gap-1 border-t border-slate-800 pt-2">
+      {REACTIONS.map((e) => (
+        <button
+          key={e}
+          onClick={() => api.sendReaction(e)}
+          className="rounded-md px-2 py-1 text-2xl transition hover:scale-125 hover:bg-slate-800"
+          title="Throw a reaction"
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ShareBar({ roomId }: { roomId: string }) {
   const url = `${window.location.origin}/game/${roomId}`;
   const [copied, setCopied] = useState(false);
@@ -216,7 +236,7 @@ export default function GameRoom() {
   const { roomId: rawId } = useParams();
   const roomId = (rawId ?? '').toLowerCase();
   const navigate = useNavigate();
-  const { state, error, connected } = useRoom();
+  const { state, error, connected, reactions } = useRoom();
 
   const [needJoin, setNeedJoin] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -310,10 +330,10 @@ export default function GameRoom() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-emerald-400">♠ Card Room</h1>
-          <span className="rounded bg-slate-800 px-2 py-1 text-sm font-semibold text-indigo-300">
+          <span className="rounded-md bg-indigo-500/20 px-2.5 py-1 text-sm font-bold text-indigo-200 ring-1 ring-indigo-400/30">
             {VARIANTS[state.settings.variant].name}
           </span>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-300">
             {state.settings.smallBlind}/{state.settings.bigBlind} blinds · hand #{state.game.handNumber}
           </span>
         </div>
@@ -355,7 +375,7 @@ export default function GameRoom() {
       <div className="flex flex-1 gap-4">
         <main className="flex flex-1 flex-col gap-3">
           <ResultBanner state={state} />
-          <Table state={state} />
+          <Table state={state} reactions={reactions} />
           <div className="flex flex-col rounded-xl bg-slate-900 p-2">
             {state.youNote && (
               <div className="mb-1 rounded-lg bg-sky-900/60 px-4 py-2 text-center text-sm text-sky-200">
@@ -381,6 +401,7 @@ export default function GameRoom() {
             )}
             <ShowHandControls state={state} />
             <ActionBar state={state} onAct={(a) => api.act(a)} />
+            <ReactionBar />
           </div>
         </main>
         {state.youAreHost && <HostPanel state={state} />}

@@ -6,7 +6,7 @@ import type {
   RoomSettings,
   Variant,
 } from '@poker/shared';
-import { VARIANTS } from '@poker/shared';
+import { VARIANTS, isReaction } from '@poker/shared';
 import { roomManager } from '../rooms/roomManager';
 import type { Room } from '../rooms/room';
 
@@ -176,6 +176,22 @@ export function registerHandlers(io: IO): void {
       const arr = Array.isArray(indices) ? indices.map(Number).filter((n) => Number.isFinite(n)) : [];
       room.showCards(socket.data.playerId, arr);
       broadcast(io, room);
+    });
+
+    let lastReactionAt = 0;
+    socket.on('sendReaction', (emoji) => {
+      const room = currentRoom();
+      if (!room || !socket.data.playerId || !isReaction(emoji)) return;
+      const now = Date.now();
+      if (now - lastReactionAt < 400) return; // light anti-spam throttle
+      lastReactionAt = now;
+      const fromName = room.getPlayer(socket.data.playerId)?.name ?? 'Someone';
+      io.to(room.id).emit('reaction', {
+        id: `${now}-${Math.random().toString(36).slice(2, 7)}`,
+        fromId: socket.data.playerId,
+        fromName,
+        emoji,
+      });
     });
 
     socket.on('sitOut', () => {

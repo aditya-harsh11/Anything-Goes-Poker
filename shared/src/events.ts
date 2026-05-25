@@ -38,6 +38,8 @@ export interface ClientToServerEvents {
   discardCard: (index: number) => void;
   /** After a hand, voluntarily reveal hole cards by index (e.g. [0,1] for both). */
   showCards: (indices: number[]) => void;
+  /** Throw an emoji reaction onto the table. */
+  sendReaction: (emoji: string) => void;
   sitOut: () => void;
   sitIn: () => void;
   leaveRoom: () => void;
@@ -58,5 +60,7 @@ export interface ServerToClientEvents {
   roomState: (state: RoomState) => void;
   /** Private hole cards for the recipient (also embedded in RoomState, sent for convenience). */
   yourCards: (cards: Card[]) => void;
+  /** An emoji reaction thrown by a player, to float over their seat. */
+  reaction: (data: { id: string; fromId: string; fromName: string; emoji: string }) => void;
   errorMsg: (message: string) => void;
 }

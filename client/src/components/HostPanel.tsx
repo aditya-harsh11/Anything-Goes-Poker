@@ -85,28 +85,28 @@ export default function HostPanel({ state }: Props) {
         <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Manage chips</h3>
         <ul className="flex flex-col gap-2">
           {players.map((p) => (
-            <li key={p.id} className="rounded-lg bg-slate-800 p-2 text-sm">
-              <div className="flex items-center justify-between">
+            <li key={p.id} className="rounded-lg bg-slate-800 p-3 text-sm">
+              <div className="mb-2 flex items-center justify-between">
                 <span className="truncate font-semibold">{p.name}</span>
-                <span className="font-mono text-emerald-300">{p.stack.toLocaleString()}</span>
+                <span className="font-mono font-bold text-emerald-300">{p.stack.toLocaleString()}</span>
               </div>
-              <div className="mt-1 flex flex-wrap gap-1">
+              <div className="flex gap-2">
                 <button
                   onClick={() => api.adjustStack(p.id, settings.startingStack)}
-                  className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+                  className="flex flex-1 items-center justify-center rounded-md bg-slate-700 px-2 py-1.5 text-xs font-semibold hover:bg-slate-600"
                 >
                   + buy-in
                 </button>
                 <button
                   onClick={() => promptSet(p.id, p.stack)}
-                  className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+                  className="flex flex-1 items-center justify-center rounded-md bg-slate-700 px-2 py-1.5 text-xs font-semibold hover:bg-slate-600"
                 >
                   Set
                 </button>
                 {p.id !== state.hostId && (
                   <button
                     onClick={() => api.removePlayer(p.id)}
-                    className="rounded bg-rose-800 px-2 py-1 text-xs hover:bg-rose-700"
+                    className="flex flex-1 items-center justify-center rounded-md bg-rose-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
                   >
                     Kick
                   </button>

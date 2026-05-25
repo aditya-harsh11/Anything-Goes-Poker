@@ -2,11 +2,19 @@ import { useEffect, useState } from 'react';
 import type { Card, RoomState } from '@poker/shared';
 import { socket } from './socket';
 
+export interface FloatingReaction {
+  id: string;
+  fromId: string;
+  fromName: string;
+  emoji: string;
+}
+
 export interface RoomData {
   state: RoomState | null;
   yourCards: Card[];
   error: string | null;
   connected: boolean;
+  reactions: FloatingReaction[];
   dismissError: () => void;
 }
 
@@ -16,6 +24,7 @@ export function useRoom(): RoomData {
   const [yourCards, setYourCards] = useState<Card[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState<boolean>(socket.connected);
+  const [reactions, setReactions] = useState<FloatingReaction[]>([]);
 
   useEffect(() => {
     const onState = (s: RoomState) => setState(s);
@@ -23,12 +32,17 @@ export function useRoom(): RoomData {
     const onError = (m: string) => setError(m);
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
+    const onReaction = (r: FloatingReaction) => {
+      setReactions((cur) => [...cur, r]);
+      setTimeout(() => setReactions((cur) => cur.filter((x) => x.id !== r.id)), 3000);
+    };
 
     socket.on('roomState', onState);
     socket.on('yourCards', onCards);
     socket.on('errorMsg', onError);
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
+    socket.on('reaction', onReaction);
 
     return () => {
       socket.off('roomState', onState);
@@ -36,8 +50,9 @@ export function useRoom(): RoomData {
       socket.off('errorMsg', onError);
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
+      socket.off('reaction', onReaction);
     };
   }, []);
 
-  return { state, yourCards, error, connected, dismissError: () => setError(null) };
+  return { state, yourCards, error, connected, reactions, dismissError: () => setError(null) };
 }

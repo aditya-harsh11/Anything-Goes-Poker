@@ -26,6 +26,7 @@ export const api = {
   selectCards: (indices: number[]) => socket.emit('selectCards', indices),
   discardCard: (index: number) => socket.emit('discardCard', index),
   showCards: (indices: number[]) => socket.emit('showCards', indices),
+  sendReaction: (emoji: string) => socket.emit('sendReaction', emoji),
   forceShowdown: () => socket.emit('hostForceShowdown'),
   sitOut: () => socket.emit('sitOut'),
   sitIn: () => socket.emit('sitIn'),
