@@ -7,8 +7,8 @@ import { saveSession } from '../lib/session';
 export default function Home() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
-  const [smallBlind, setSmallBlind] = useState(5);
-  const [bigBlind, setBigBlind] = useState(10);
+  const [smallBlind, setSmallBlind] = useState(10);
+  const [bigBlind, setBigBlind] = useState(20);
   const [startingStack, setStartingStack] = useState(1000);
   const [maxSeats, setMaxSeats] = useState(8);
   const [joinCode, setJoinCode] = useState('');

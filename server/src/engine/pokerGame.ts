@@ -720,7 +720,7 @@ export class PokerGame {
     }
     // Praise players who squeezed the best possible hand out of their cards.
     for (const id of playedBest) {
-      this.notes.set(id, 'Nicely played — the best hand your cards could make. 🎯');
+      this.notes.set(id, 'Nicely played — the best hand your cards could make.');
     }
   }
 

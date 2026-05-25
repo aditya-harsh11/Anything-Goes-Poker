@@ -76,7 +76,6 @@ function Seat({
 
       <div className="flex w-full items-center justify-between gap-1">
         <span className={`truncate text-sm font-semibold ${isLeader ? 'text-brass-bright' : 'text-ink'}`}>
-          {isLeader && '👑 '}
           {player.name}
           {isYou ? ' (you)' : ''}
         </span>

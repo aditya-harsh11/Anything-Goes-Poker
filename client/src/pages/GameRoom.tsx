@@ -324,6 +324,8 @@ export default function GameRoom() {
         </div>
       </header>
 
+      <p className="-mt-1 text-xs italic text-ink-dim">{VARIANTS[state.settings.variant].description}</p>
+
       {state.youStatus === 'pending' && (
         <div className="rounded-xl bg-brass/15 px-4 py-2 text-center text-sm text-brass-bright ring-1 ring-brass/25">
           Waiting for the host to approve you…
@@ -342,7 +344,7 @@ export default function GameRoom() {
           <div className="panel relative z-10 flex flex-col gap-1 rounded-2xl p-3">
             {state.youNote && (
               <div className="rounded-lg bg-emerald-500/10 px-4 py-2 text-center text-sm text-emerald-200 ring-1 ring-emerald-400/20">
-                💡 {state.youNote}
+                {state.youNote}
               </div>
             )}
             <ChooseTray key={state.game.handNumber} state={state} />

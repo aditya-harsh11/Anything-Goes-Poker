@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { type RoomState, type Variant, VARIANT_LIST, VARIANTS } from '@poker/shared';
 import { api } from '../lib/api';
 import Dropdown from './Dropdown';
@@ -11,11 +12,17 @@ export default function HostPanel({ state }: Props) {
   const handInProgress = game.phase !== 'waiting' && game.phase !== 'showdown';
   const eligible = players.filter((p) => p.status !== 'sittingout' && p.stack > 0).length;
 
-  const promptSet = (playerId: string, current: number) => {
-    const raw = window.prompt('Set stack to:', String(current));
-    if (raw === null) return;
-    const value = Math.max(0, Math.floor(Number(raw)));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState('');
+
+  const startEdit = (playerId: string, current: number) => {
+    setEditingId(playerId);
+    setEditVal(String(current));
+  };
+  const applyEdit = (playerId: string) => {
+    const value = Math.max(0, Math.floor(Number(editVal)));
     if (Number.isFinite(value)) api.setStack(playerId, value);
+    setEditingId(null);
   };
 
   const heading = 'mb-2 font-display text-lg text-brass-bright';
@@ -42,7 +49,7 @@ export default function HostPanel({ state }: Props) {
             disabled={players.length < 2}
             className="btn btn-ghost mb-2 w-full py-2 text-sm"
           >
-            🔀 Shuffle seats
+            Shuffle seats
           </button>
         )}
         <button
@@ -88,22 +95,45 @@ export default function HostPanel({ state }: Props) {
                 <span className="truncate font-semibold">{p.name}</span>
                 <span className="font-mono font-bold text-emerald-300">{p.stack.toLocaleString()}</span>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => api.adjustStack(p.id, settings.startingStack)}
-                  className="btn btn-ghost flex-1 py-1.5 text-xs"
-                >
-                  + buy-in
-                </button>
-                <button onClick={() => promptSet(p.id, p.stack)} className="btn btn-ghost flex-1 py-1.5 text-xs">
-                  Set
-                </button>
-                {p.id !== state.hostId && (
-                  <button onClick={() => api.removePlayer(p.id)} className="btn btn-danger flex-1 py-1.5 text-xs">
-                    Kick
+              {editingId === p.id ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    autoFocus
+                    value={editVal}
+                    onChange={(e) => setEditVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') applyEdit(p.id);
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                    className="field flex-1 py-1.5 text-sm"
+                  />
+                  <button onClick={() => applyEdit(p.id)} className="btn btn-emerald px-3 py-1.5 text-xs">
+                    Set
                   </button>
-                )}
-              </div>
+                  <button onClick={() => setEditingId(null)} className="btn btn-ghost px-3 py-1.5 text-xs">
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => api.adjustStack(p.id, settings.startingStack)}
+                    className="btn btn-ghost flex-1 py-1.5 text-xs"
+                  >
+                    + buy-in
+                  </button>
+                  <button onClick={() => startEdit(p.id, p.stack)} className="btn btn-ghost flex-1 py-1.5 text-xs">
+                    Set
+                  </button>
+                  {p.id !== state.hostId && (
+                    <button onClick={() => api.removePlayer(p.id)} className="btn btn-danger flex-1 py-1.5 text-xs">
+                      Kick
+                    </button>
+                  )}
+                </div>
+              )}
             </li>
           ))}
         </ul>
