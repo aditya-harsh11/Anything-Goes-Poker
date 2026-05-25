@@ -135,7 +135,9 @@ function ShareBar({ roomId }: { roomId: string }) {
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className="text-ink-dim">Invite</span>
-      <code className="rounded-md bg-black/40 px-2 py-1 text-brass ring-1 ring-brass/15">{roomId}</code>
+      <code className="max-w-[60vw] select-all truncate rounded-md bg-black/40 px-2 py-1 text-brass ring-1 ring-brass/15">
+        {url}
+      </code>
       <button
         onClick={() => {
           navigator.clipboard.writeText(url);
@@ -144,7 +146,7 @@ function ShareBar({ roomId }: { roomId: string }) {
         }}
         className="btn btn-ghost px-2.5 py-1 text-xs"
       >
-        {copied ? 'Copied!' : 'Copy link'}
+        {copied ? 'Copied!' : 'Copy'}
       </button>
     </div>
   );
