@@ -19,9 +19,9 @@ function ResultBanner({ state }: { state: RoomState }) {
         <span className="text-slate-300">Hand complete</span>
       ) : (
         r.winners.map((w, i) => (
-          <span key={`${w.playerId}-${w.board ?? ''}-${i}`} className="mr-3 font-semibold text-yellow-300">
+          <span key={`${w.playerId}-${w.board ?? w.label ?? ''}-${i}`} className="mr-3 font-semibold text-yellow-300">
             {w.name} wins {w.amount.toLocaleString()}
-            {w.board ? ` (Board ${w.board})` : ''}
+            {w.label ? ` (${w.label})` : w.board ? ` (Board ${w.board})` : ''}
           </span>
         ))
       )}
@@ -94,7 +94,10 @@ function PlayerHand({ state }: { state: RoomState }) {
       {mode === 'select' && (
         <div className="flex items-center gap-3 text-sm">
           <span className="text-slate-300">
-            Choose {selectionHint(variant.allowedHoleCounts)} — {sel.length} selected
+            {variant.blackjack
+              ? 'Pick 2 cards for poker (the other 2 are your blackjack hand)'
+              : `Choose ${selectionHint(variant.allowedHoleCounts)}`}{' '}
+            — {sel.length} selected
           </span>
           <button
             disabled={!canConfirm}

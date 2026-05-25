@@ -7,7 +7,8 @@ export type Variant =
   | 'one-three-five'
   | 'crazy-pineapple'
   | 'bomb-holdem'
-  | 'bomb-omaha';
+  | 'bomb-omaha'
+  | 'blackjack-holdem';
 
 export interface VariantConfig {
   id: Variant;
@@ -23,6 +24,8 @@ export interface VariantConfig {
   discardAfterFlop: number;
   /** Bomb pot: ante instead of blinds, no preflop, two boards, pot split per board. */
   bombPot: boolean;
+  /** Blackjack Hold'em: split 4 cards into 2 for poker + 2 for blackjack; pot split 50/50. */
+  blackjack: boolean;
   bettingStructure: 'no-limit' | 'pot-limit';
 }
 
@@ -36,6 +39,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: false,
     discardAfterFlop: 0,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   plo: {
@@ -47,6 +51,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: true,
     discardAfterFlop: 0,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'pot-limit',
   },
   'dirty-omaha': {
@@ -58,6 +63,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: true,
     discardAfterFlop: 0,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   'two-or-three': {
@@ -69,6 +75,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: true,
     discardAfterFlop: 0,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   'all-five': {
@@ -80,6 +87,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: true,
     discardAfterFlop: 0,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   'one-three-five': {
@@ -91,6 +99,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: true,
     discardAfterFlop: 0,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   'crazy-pineapple': {
@@ -102,6 +111,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: false,
     discardAfterFlop: 1,
     bombPot: false,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   'bomb-holdem': {
@@ -113,6 +123,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: false,
     discardAfterFlop: 0,
     bombPot: true,
+    blackjack: false,
     bettingStructure: 'no-limit',
   },
   'bomb-omaha': {
@@ -124,6 +135,19 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     manualSelect: false,
     discardAfterFlop: 0,
     bombPot: true,
+    blackjack: false,
+    bettingStructure: 'no-limit',
+  },
+  'blackjack-holdem': {
+    id: 'blackjack-holdem',
+    name: "Blackjack Hold'em",
+    description: '4 cards. At showdown split into 2 for poker + 2 for blackjack. Pot splits 50/50.',
+    holeCards: 4,
+    allowedHoleCounts: [2],
+    manualSelect: true,
+    discardAfterFlop: 0,
+    bombPot: false,
+    blackjack: true,
     bettingStructure: 'no-limit',
   },
 };

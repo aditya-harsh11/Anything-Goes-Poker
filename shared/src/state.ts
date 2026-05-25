@@ -96,7 +96,14 @@ export interface HandResult {
   board: Card[];
   /** Bomb pots: the second board. */
   board2?: Card[];
-  winners: { playerId: string; name: string; amount: number; handName?: string; board?: 'A' | 'B' }[];
+  winners: {
+    playerId: string;
+    name: string;
+    amount: number;
+    handName?: string;
+    board?: 'A' | 'B';
+    label?: string;
+  }[];
   /** Hands shown at showdown (omitted when a hand ends by everyone folding). */
   revealed: { playerId: string; name: string; holeCards: Card[]; handName: string }[];
 }

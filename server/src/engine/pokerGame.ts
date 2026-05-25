@@ -20,6 +20,7 @@ import {
   type SolvedHand,
 } from './handEvaluator';
 import { buildPots, type Contribution } from './sidePots';
+import { evaluateBlackjack, blackjackWinners, type BlackjackHand } from './blackjack';
 
 /** Structural view of a player the engine reads/mutates (ServerPlayer satisfies this). */
 export interface HandPlayer {
@@ -674,6 +675,11 @@ export class PokerGame {
   }
 
   private resolveSelectedShowdown(): void {
+    this.awaitingSelection = false;
+    if (this.variant.blackjack) {
+      this.resolveBlackjackShowdown();
+      return;
+    }
     const contenders = this.contenders();
     const solved = new Map<string, SolvedHand>();
     for (const p of contenders) {
@@ -735,6 +741,80 @@ export class PokerGame {
     this.toActIndex = null;
     this.complete = true;
     this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
+  }
+
+  /** Blackjack Hold'em: split each pot between the best poker hand and the best blackjack hand. */
+  private resolveBlackjackShowdown(): void {
+    const contenders = this.contenders();
+    const pokerSolved = new Map<string, SolvedHand>();
+    const bjByPlayer = new Map<string, BlackjackHand>();
+    for (const p of contenders) {
+      const sel = this.selections.get(p.id) ?? bestSelection(p.holeCards, this.board, [2]).indices;
+      const bjCards = p.holeCards.filter((_, i) => !sel.includes(i));
+      pokerSolved.set(p.id, { id: p.id, hand: handFromSelection(p.holeCards, sel, this.board) });
+      bjByPlayer.set(p.id, evaluateBlackjack(bjCards));
+    }
+
+    const contribs: Contribution[] = this.seats.map((p) => ({
+      id: p.id,
+      amount: p.totalCommitted,
+      folded: p.status === 'folded',
+    }));
+    const pots = buildPots(contribs);
+
+    const winsPoker = new Map<string, number>();
+    const winsBj = new Map<string, number>();
+    for (const pot of pots) {
+      const halfPoker = Math.ceil(pot.amount / 2); // odd chip to the poker half
+      const halfBj = pot.amount - halfPoker;
+      this.awardBombHalf(pot.eligible, pokerSolved, halfPoker, winsPoker);
+      this.awardBlackjackHalf(pot.eligible, bjByPlayer, halfBj, winsBj);
+    }
+
+    const apply = (m: Map<string, number>) => {
+      for (const [id, amt] of m) {
+        const p = this.seats.find((s) => s.id === id);
+        if (p) p.stack += amt;
+      }
+    };
+    apply(winsPoker);
+    apply(winsBj);
+
+    const nameOf = (id: string) => this.seats.find((s) => s.id === id)?.name ?? '';
+    const winners: HandResult['winners'] = [
+      ...[...winsPoker.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, label: 'Poker' })),
+      ...[...winsBj.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, label: 'Blackjack' })),
+    ];
+
+    this.phase = 'showdown';
+    this.toActIndex = null;
+    this.complete = true;
+    this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
+  }
+
+  private awardBlackjackHalf(
+    eligibleIds: string[],
+    bjByPlayer: Map<string, BlackjackHand>,
+    amount: number,
+    out: Map<string, number>,
+  ): void {
+    if (amount <= 0) return;
+    const entries = eligibleIds
+      .map((id) => ({ id, hand: bjByPlayer.get(id) }))
+      .filter((e): e is { id: string; hand: BlackjackHand } => !!e.hand);
+    const winnerIds = blackjackWinners(entries);
+    if (winnerIds.length === 0) return;
+    const ordered = this.orderByPosition(winnerIds);
+    const base = Math.floor(amount / ordered.length);
+    let remainder = amount - base * ordered.length;
+    for (const id of ordered) {
+      let share = base;
+      if (remainder > 0) {
+        share += 1;
+        remainder -= 1;
+      }
+      out.set(id, (out.get(id) ?? 0) + share);
+    }
   }
 
   /** Order winner ids by position starting just left of the button (for odd-chip distribution). */
