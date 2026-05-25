@@ -36,6 +36,7 @@ export interface HandPlayer {
   totalCommitted: number;
   inHand: boolean;
   holeCards: Card[];
+  shownCards?: number[];
   lastAction?: string;
   handName?: string;
 }
@@ -229,6 +230,15 @@ export class PokerGame {
   isContender(id: string): boolean {
     const p = this.seats.find((s) => s.id === id);
     return !!p && p.status !== 'folded';
+  }
+
+  /** At showdown, all-in players can't muck — force their cards face-up. */
+  private forceShowAllIns(): void {
+    for (const p of this.seats) {
+      if (p.status === 'allin' && p.holeCards.length > 0) {
+        p.shownCards = p.holeCards.map((_, i) => i);
+      }
+    }
   }
 
   hasSelected(id: string): boolean {
@@ -598,6 +608,7 @@ export class PokerGame {
     this.phase = 'showdown';
     this.toActIndex = null;
     this.complete = true;
+    this.forceShowAllIns();
     this.lastResult = {
       handNumber: this.handNumber,
       board: this.board,
@@ -770,6 +781,7 @@ export class PokerGame {
     this.phase = 'showdown';
     this.toActIndex = null;
     this.complete = true;
+    this.forceShowAllIns();
     this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
   }
 
@@ -822,6 +834,7 @@ export class PokerGame {
     this.phase = 'showdown';
     this.toActIndex = null;
     this.complete = true;
+    this.forceShowAllIns();
     this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
   }
 
