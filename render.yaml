@@ -1,0 +1,10 @@
+# One-click-ish deploy to Render (free tier). In Render: New + → Blueprint → pick this repo.
+# Serves the built client and the Socket.IO server from a single free web service.
+services:
+  - type: web
+    name: card-room
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
