@@ -73,6 +73,8 @@ export interface PublicGameState {
   toAct: string | null;
   /** Manual-select variants: at showdown, contenders are choosing which hole cards to use. */
   awaitingSelection: boolean;
+  /** Crazy Pineapple: after the flop, contenders are discarding a card. */
+  awaitingDiscard: boolean;
   dealerSeat: number | null;
   smallBlindSeat: number | null;
   bigBlindSeat: number | null;
@@ -109,6 +111,8 @@ export interface RoomState {
   availableActions?: AvailableActions;
   /** True when the recipient must choose which of their hole cards to use (manual-select showdown). */
   youMustSelect?: boolean;
+  /** True when the recipient must discard a card after the flop (Crazy Pineapple). */
+  youMustDiscard?: boolean;
   /** Private coaching note for the recipient, e.g. "you could have made a flush". */
   youNote?: string;
   /** Only populated for the host. */

@@ -28,19 +28,37 @@ function ResultBanner({ state }: { state: RoomState }) {
   );
 }
 
-/** During a hand, show the viewer's own cards large. At a manual-select showdown, let them choose. */
+/**
+ * Shows the viewer's own cards large. In Crazy Pineapple they pick a card to discard;
+ * at a manual-select showdown they pick which cards to use.
+ */
 function PlayerHand({ state }: { state: RoomState }) {
   const me = state.players.find((p) => p.id === state.youId);
   const cards = me?.holeCards ?? [];
-  const mustSelect = !!state.youMustSelect;
   const variant = VARIANTS[state.settings.variant];
+  const mode: 'discard' | 'select' | 'none' = state.youMustDiscard
+    ? 'discard'
+    : state.youMustSelect
+      ? 'select'
+      : 'none';
   const [sel, setSel] = useState<number[]>([]);
 
   if (cards.length === 0) return null;
 
-  const toggle = (i: number) =>
-    setSel((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]));
-  const countOk = variant.allowedHoleCounts.includes(sel.length);
+  const toggle = (i: number) => {
+    if (mode === 'discard') {
+      setSel((cur) => (cur[0] === i ? [] : [i]));
+    } else {
+      setSel((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]));
+    }
+  };
+  const ringColor = mode === 'discard' ? 'ring-rose-400' : 'ring-emerald-400';
+  const canConfirm = mode === 'discard' ? sel.length === 1 : variant.allowedHoleCounts.includes(sel.length);
+
+  const confirm = () => {
+    if (mode === 'discard') api.discardCard(sel[0]);
+    else api.selectCards(sel);
+  };
 
   return (
     <div className="flex flex-col items-center gap-2 py-2">
@@ -50,9 +68,9 @@ function PlayerHand({ state }: { state: RoomState }) {
           return (
             <button
               key={i}
-              onClick={mustSelect ? () => toggle(i) : undefined}
-              className={`rounded-md transition ${mustSelect ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'} ${
-                mustSelect && selected ? '-translate-y-2 rounded-lg ring-4 ring-emerald-400' : ''
+              onClick={mode !== 'none' ? () => toggle(i) : undefined}
+              className={`rounded-md transition ${mode !== 'none' ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'} ${
+                selected ? `-translate-y-2 rounded-lg ring-4 ${ringColor}` : ''
               }`}
             >
               <PlayingCard card={card} size="lg" />
@@ -60,14 +78,26 @@ function PlayerHand({ state }: { state: RoomState }) {
           );
         })}
       </div>
-      {mustSelect && (
+      {mode === 'discard' && (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-slate-300">Pick a card to discard — {sel.length}/1 chosen</span>
+          <button
+            disabled={!canConfirm}
+            onClick={confirm}
+            className="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white hover:bg-rose-500 disabled:opacity-40"
+          >
+            Discard
+          </button>
+        </div>
+      )}
+      {mode === 'select' && (
         <div className="flex items-center gap-3 text-sm">
           <span className="text-slate-300">
             Choose {selectionHint(variant.allowedHoleCounts)} — {sel.length} selected
           </span>
           <button
-            disabled={!countOk}
-            onClick={() => api.selectCards(sel)}
+            disabled={!canConfirm}
+            onClick={confirm}
             className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
           >
             Confirm
@@ -326,15 +356,18 @@ export default function GameRoom() {
               </div>
             )}
             <PlayerHand key={state.game.handNumber} state={state} />
-            {state.game.awaitingSelection && !state.youMustSelect && (
+            {((state.game.awaitingSelection && !state.youMustSelect) ||
+              (state.game.awaitingDiscard && !state.youMustDiscard)) && (
               <div className="flex items-center justify-center gap-3 py-1 text-sm text-slate-400">
-                Waiting for players to choose their cards…
+                {state.game.awaitingDiscard
+                  ? 'Waiting for players to discard…'
+                  : 'Waiting for players to choose their cards…'}
                 {state.youAreHost && (
                   <button
                     onClick={() => api.forceShowdown()}
                     className="rounded bg-slate-700 px-3 py-1 text-xs hover:bg-slate-600"
                   >
-                    Reveal now
+                    {state.game.awaitingDiscard ? 'Force discard' : 'Reveal now'}
                   </button>
                 )}
               </div>

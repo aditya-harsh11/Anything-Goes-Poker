@@ -163,6 +163,13 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
+    socket.on('discardCard', (index) => {
+      const room = currentRoom();
+      if (!room || !socket.data.playerId) return;
+      room.discardCard(socket.data.playerId, Number(index));
+      broadcast(io, room);
+    });
+
     socket.on('showCards', (indices) => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;

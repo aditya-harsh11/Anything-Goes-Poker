@@ -4,7 +4,8 @@ export type Variant =
   | 'dirty-omaha'
   | 'two-or-three'
   | 'all-five'
-  | 'one-three-five';
+  | 'one-three-five'
+  | 'crazy-pineapple';
 
 export interface VariantConfig {
   id: Variant;
@@ -16,6 +17,8 @@ export interface VariantConfig {
   allowedHoleCounts: number[];
   /** If true, players manually choose which hole cards to use at showdown. */
   manualSelect: boolean;
+  /** Cards each player must discard after the flop is dealt (0 = none). */
+  discardAfterFlop: number;
   bettingStructure: 'no-limit' | 'pot-limit';
 }
 
@@ -27,6 +30,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 2,
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
+    discardAfterFlop: 0,
     bettingStructure: 'no-limit',
   },
   plo: {
@@ -36,6 +40,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 4,
     allowedHoleCounts: [2],
     manualSelect: true,
+    discardAfterFlop: 0,
     bettingStructure: 'pot-limit',
   },
   'dirty-omaha': {
@@ -45,6 +50,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 4,
     allowedHoleCounts: [0, 1, 2, 3, 4],
     manualSelect: true,
+    discardAfterFlop: 0,
     bettingStructure: 'no-limit',
   },
   'two-or-three': {
@@ -54,6 +60,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 5,
     allowedHoleCounts: [2, 3],
     manualSelect: true,
+    discardAfterFlop: 0,
     bettingStructure: 'no-limit',
   },
   'all-five': {
@@ -63,6 +70,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 5,
     allowedHoleCounts: [0, 1, 2, 3, 4, 5],
     manualSelect: true,
+    discardAfterFlop: 0,
     bettingStructure: 'no-limit',
   },
   'one-three-five': {
@@ -72,6 +80,17 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     holeCards: 5,
     allowedHoleCounts: [1, 3, 5],
     manualSelect: true,
+    discardAfterFlop: 0,
+    bettingStructure: 'no-limit',
+  },
+  'crazy-pineapple': {
+    id: 'crazy-pineapple',
+    name: 'Crazy Pineapple',
+    description: '3 hole cards. Discard 1 after the flop, then play like Hold’em.',
+    holeCards: 3,
+    allowedHoleCounts: [0, 1, 2],
+    manualSelect: false,
+    discardAfterFlop: 1,
     bettingStructure: 'no-limit',
   },
 };

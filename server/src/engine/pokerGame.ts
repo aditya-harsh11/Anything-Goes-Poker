@@ -51,6 +51,8 @@ export class PokerGame {
 
   /** Manual-select variants: at showdown, contenders choose which hole cards to use. */
   awaitingSelection = false;
+  /** Crazy Pineapple: after the flop, contenders must discard a card. */
+  awaitingDiscard = false;
   /** Private coaching notes ("you could have made X"), keyed by player id. */
   notes = new Map<string, string>();
 
@@ -68,6 +70,7 @@ export class PokerGame {
   private actedThisStreet = new Set<string>();
   private lastActedBet = new Map<string, number>();
   private selections = new Map<string, number[]>();
+  private discardDone = false;
   private complete = false;
 
   constructor(
@@ -244,6 +247,7 @@ export class PokerGame {
       minRaise: this.minRaise,
       toAct: this.currentActorId,
       awaitingSelection: this.awaitingSelection,
+      awaitingDiscard: this.awaitingDiscard,
       dealerSeat: this.seats[this.buttonIndex]?.seat ?? null,
       smallBlindSeat: this.smallBlindSeat >= 0 ? this.smallBlindSeat : null,
       bigBlindSeat: this.bigBlindSeat >= 0 ? this.bigBlindSeat : null,
@@ -384,6 +388,11 @@ export class PokerGame {
         return;
       }
       this.dealNextStreet();
+      // Crazy Pineapple: after the flop, pause for everyone to discard before betting.
+      if (this.phase === 'flop' && this.variant.discardAfterFlop > 0 && !this.discardDone) {
+        this.awaitingDiscard = true;
+        return;
+      }
       this.resetStreetBetting();
       if (this.ableToAct().length >= 2) {
         this.toActIndex = this.nextUnsettledIndex(this.buttonIndex);
@@ -391,6 +400,47 @@ export class PokerGame {
       }
       // Nobody (or only one) can act this street — deal the next one (all-in run-out).
     }
+  }
+
+  private targetHoleCards(): number {
+    return this.variant.holeCards - this.variant.discardAfterFlop;
+  }
+
+  /** Crazy Pineapple: a player discards one of their hole cards after the flop. */
+  submitDiscard(playerId: string, index: number): ActionResult {
+    if (!this.awaitingDiscard) return { ok: false, error: 'no discard expected' };
+    const p = this.seats.find((s) => s.id === playerId);
+    if (!p || p.status === 'folded') return { ok: false, error: 'not in the hand' };
+    if (p.holeCards.length <= this.targetHoleCards()) return { ok: false, error: 'already discarded' };
+    if (!Number.isInteger(index) || index < 0 || index >= p.holeCards.length) {
+      return { ok: false, error: 'bad card index' };
+    }
+    p.holeCards.splice(index, 1);
+    if (this.contenders().every((c) => c.holeCards.length <= this.targetHoleCards())) {
+      this.resumeAfterDiscard();
+    }
+    return { ok: true };
+  }
+
+  mustDiscard(playerId: string): boolean {
+    if (!this.awaitingDiscard) return false;
+    const p = this.seats.find((s) => s.id === playerId);
+    return !!p && p.status !== 'folded' && p.holeCards.length > this.targetHoleCards();
+  }
+
+  private resumeAfterDiscard(): void {
+    this.discardDone = true;
+    this.awaitingDiscard = false;
+    this.resetStreetBetting();
+    if (this.ableToAct().length >= 2) {
+      const idx = this.nextUnsettledIndex(this.buttonIndex);
+      if (idx !== null) {
+        this.toActIndex = idx;
+        return;
+      }
+    }
+    // No flop betting possible (all-in run-out) — continue dealing the remaining streets.
+    this.startNextStreet();
   }
 
   private dealNextStreet(): void {
@@ -475,8 +525,16 @@ export class PokerGame {
     return { ok: true };
   }
 
-  /** Host can force the showdown if someone is slow/disconnected (auto-picks their best). */
+  /** Host can force progress if someone is slow/disconnected (auto-picks for them). */
   forceResolve(): void {
+    if (this.awaitingDiscard) {
+      // Auto-discard the trailing card(s) for anyone who hasn't.
+      for (const p of this.contenders()) {
+        while (p.holeCards.length > this.targetHoleCards()) p.holeCards.pop();
+      }
+      this.resumeAfterDiscard();
+      return;
+    }
     if (!this.awaitingSelection) return;
     for (const p of this.contenders()) {
       if (!this.selections.has(p.id)) {

@@ -33,6 +33,8 @@ export interface ClientToServerEvents {
   playerAction: (action: PlayerAction) => void;
   /** At a manual-select showdown, lock in which hole cards to use (by index). */
   selectCards: (indices: number[]) => void;
+  /** Crazy Pineapple: discard one hole card (by index) after the flop. */
+  discardCard: (index: number) => void;
   /** After a hand, voluntarily reveal hole cards by index (e.g. [0,1] for both). */
   showCards: (indices: number[]) => void;
   sitOut: () => void;

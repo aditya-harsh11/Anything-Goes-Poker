@@ -246,6 +246,13 @@ export class Room {
     this.maybeFinalize();
   }
 
+  /** Crazy Pineapple: a player discards one hole card after the flop. */
+  discardCard(playerId: string, index: number): void {
+    if (!this.game) return;
+    this.game.submitDiscard(playerId, index);
+    this.maybeFinalize();
+  }
+
   /** Host forces the showdown to resolve (auto-picks best for anyone who hasn't chosen). */
   forceShowdown(): void {
     if (!this.game) return;
@@ -316,6 +323,7 @@ export class Room {
       minRaise: this.settings.bigBlind,
       toAct: null,
       awaitingSelection: false,
+      awaitingDiscard: false,
       dealerSeat: this.dealerButton >= 0 ? this.dealerButton : null,
       smallBlindSeat: null,
       bigBlindSeat: null,
@@ -389,6 +397,9 @@ export class Room {
     if (this.game) {
       if (this.game.awaitingSelection && this.game.isContender(viewerId) && !this.game.hasSelected(viewerId)) {
         state.youMustSelect = true;
+      }
+      if (this.game.mustDiscard(viewerId)) {
+        state.youMustDiscard = true;
       }
       const note = this.game.notes.get(viewerId);
       if (note) state.youNote = note;

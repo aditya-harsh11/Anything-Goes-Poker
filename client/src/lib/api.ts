@@ -23,6 +23,7 @@ export const api = {
   startHand: () => socket.emit('startHand'),
   act: (action: PlayerAction) => socket.emit('playerAction', action),
   selectCards: (indices: number[]) => socket.emit('selectCards', indices),
+  discardCard: (index: number) => socket.emit('discardCard', index),
   showCards: (indices: number[]) => socket.emit('showCards', indices),
   forceShowdown: () => socket.emit('hostForceShowdown'),
   sitOut: () => socket.emit('sitOut'),
