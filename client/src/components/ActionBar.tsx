@@ -70,7 +70,7 @@ export default function ActionBar({ state, onAct }: Props) {
             max={av.maxRaiseTo}
             value={raiseTo}
             onChange={(e) => setRaiseTo(Number(e.target.value))}
-            className="w-36 accent-[#c9a66b]"
+            className="h-2 min-w-[12rem] flex-1 cursor-pointer accent-[#c9a66b]"
           />
           <input
             type="number"
@@ -78,7 +78,7 @@ export default function ActionBar({ state, onAct }: Props) {
             max={av.maxRaiseTo}
             value={raiseTo}
             onChange={(e) => setRaiseTo(clamp(Number(e.target.value)))}
-            className="field w-24 text-right font-mono"
+            className="field w-16 px-1 text-right font-mono"
           />
           <div className="flex gap-1.5">
             {quick.map((q) => (

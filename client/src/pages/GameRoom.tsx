@@ -47,22 +47,39 @@ function ChooseTray({ state }: { state: RoomState }) {
     if (mode === 'discard') setSel((cur) => (cur[0] === i ? [] : [i]));
     else setSel((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]));
   };
-  const ringColor = mode === 'discard' ? 'ring-crimson' : 'ring-emerald-400';
-  const canConfirm = mode === 'discard' ? sel.length === 1 : variant.allowedHoleCounts.includes(sel.length);
-  const confirm = () => (mode === 'discard' ? api.discardCard(sel[0]) : api.selectCards(sel));
+  const isDiscard = mode === 'discard';
+  const ring = isDiscard ? 'ring-crimson' : 'ring-emerald-400';
+  const glow = isDiscard
+    ? 'shadow-[0_0_18px_rgba(184,85,74,0.75)]'
+    : 'shadow-[0_0_18px_rgba(52,211,153,0.75)]';
+  const canConfirm = isDiscard ? sel.length === 1 : variant.allowedHoleCounts.includes(sel.length);
+  const confirm = () => (isDiscard ? api.discardCard(sel[0]) : api.selectCards(sel));
 
   return (
     <div className="flex flex-col items-center gap-2 border-b border-brass/15 pb-3">
-      <div className="flex items-end gap-2">
+      <div className="flex flex-wrap items-end justify-center gap-2.5">
         {cards.map((card, i) => {
           const selected = sel.includes(i);
           return (
             <button
               key={i}
               onClick={() => toggle(i)}
-              className={`rounded-lg transition hover:-translate-y-1 ${selected ? `-translate-y-2 ring-4 ${ringColor}` : ''}`}
+              className={`relative rounded-lg transition ${
+                selected
+                  ? `-translate-y-3 ring-4 ${ring} ${glow}`
+                  : 'opacity-60 hover:-translate-y-1 hover:opacity-100'
+              }`}
             >
               <PlayingCard card={card} size="md" />
+              {selected && (
+                <span
+                  className={`absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
+                    isDiscard ? 'bg-crimson text-white' : 'bg-emerald-400 text-black'
+                  }`}
+                >
+                  {isDiscard ? '✕' : '✓'}
+                </span>
+              )}
             </button>
           );
         })}

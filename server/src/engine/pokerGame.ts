@@ -704,6 +704,8 @@ export class PokerGame {
     }
     this.awaitingSelection = false;
     this.awardFromSolved(solved);
+    // Winners don't need a "you could have made more" note — they won.
+    for (const w of this.lastResult?.winners ?? []) this.notes.delete(w.playerId);
   }
 
   /** Build side pots, award to the best eligible solved hands, and finish the hand. */
