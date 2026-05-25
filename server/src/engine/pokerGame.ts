@@ -694,23 +694,34 @@ export class PokerGame {
     }
     const contenders = this.contenders();
     const solved = new Map<string, SolvedHand>();
+    const playedBest = new Set<string>();
     for (const p of contenders) {
-      const sel = this.selections.get(p.id) ??
-        bestSelection(p.holeCards, this.board, this.variant.allowedHoleCounts).indices;
+      const chosen = this.selections.get(p.id);
+      const sel = chosen ?? bestSelection(p.holeCards, this.board, this.variant.allowedHoleCounts).indices;
       const hand = handFromSelection(p.holeCards, sel, this.board);
       solved.set(p.id, { id: p.id, hand });
 
       // Advisor: privately note if a meaningfully stronger hand was available
       // (skip kicker-only improvements, which would read as the same hand name).
       const best = bestSelection(p.holeCards, this.board, this.variant.allowedHoleCounts);
-      if (compareHands(best.hand, hand) > 0 && describe(best.hand) !== describe(hand)) {
+      const better = compareHands(best.hand, hand) > 0 && describe(best.hand) !== describe(hand);
+      if (better) {
         this.notes.set(p.id, `You played ${describe(hand)} — you could have made ${describe(best.hand)}.`);
+      } else if (chosen) {
+        // They made an explicit choice and it was already optimal.
+        playedBest.add(p.id);
       }
     }
     this.awaitingSelection = false;
     this.awardFromSolved(solved);
-    // Winners don't need a "you could have made more" note — they won.
-    for (const w of this.lastResult?.winners ?? []) this.notes.delete(w.playerId);
+    // Drop the "could have made more" nudge for winners (they won — no need).
+    for (const w of this.lastResult?.winners ?? []) {
+      if (!playedBest.has(w.playerId)) this.notes.delete(w.playerId);
+    }
+    // Praise players who squeezed the best possible hand out of their cards.
+    for (const id of playedBest) {
+      this.notes.set(id, 'Nicely played — the best hand your cards could make. 🎯');
+    }
   }
 
   /** Build side pots, award to the best eligible solved hands, and finish the hand. */
