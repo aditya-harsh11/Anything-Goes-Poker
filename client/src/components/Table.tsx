@@ -53,17 +53,20 @@ function Seat({
     faceCards = visible;
     backCount = player.cardBacks;
   }
+  const hasCards = faceCards.length > 0 || backCount > 0;
 
   return (
     <div
-      className={`panel flex flex-col items-center gap-1 rounded-2xl px-2.5 py-2 ${
+      className={`panel flex flex-col items-center gap-0.5 rounded-2xl px-2.5 pb-2 pt-1.5 ${
         isYou ? 'min-w-36' : 'w-36'
       } ${isToAct ? 'active-glow' : ''} ${dimmed ? 'opacity-55' : ''}`}
     >
-      <div className="flex min-h-11 items-center justify-center gap-0.5">
-        {faceCards.map((c, i) => <PlayingCard key={`v${i}`} card={c} size={isYou ? 'sm' : 'xs'} />)}
-        {Array.from({ length: backCount }).map((_, i) => <PlayingCard key={`b${i}`} hidden size="xs" />)}
-      </div>
+      {hasCards && (
+        <div className="flex min-h-11 items-center justify-center gap-0.5">
+          {faceCards.map((c, i) => <PlayingCard key={`v${i}`} card={c} size={isYou ? 'sm' : 'xs'} />)}
+          {Array.from({ length: backCount }).map((_, i) => <PlayingCard key={`b${i}`} hidden size="xs" />)}
+        </div>
+      )}
 
       <div className="flex w-full items-center justify-between gap-1">
         <span className={`truncate text-sm font-semibold ${isLeader ? 'text-brass-bright' : 'text-ink'}`}>
@@ -95,13 +98,13 @@ function Seat({
         {!player.isConnected && <span className="text-xs text-crimson">offline</span>}
       </div>
 
-      <div className="flex min-h-4 items-center gap-2 text-center text-[11px] leading-tight">
+      <div className="flex min-h-5 items-center gap-2 text-center leading-tight">
         {badge ? (
-          <span className={`rounded px-1.5 py-0.5 ${badge.cls}`}>{badge.label}</span>
+          <span className={`rounded px-1.5 py-0.5 text-[11px] ${badge.cls}`}>{badge.label}</span>
         ) : player.handName ? (
-          <span className="text-brass">{player.handName}</span>
+          <span className="text-xs text-brass">{player.handName}</span>
         ) : player.lastAction ? (
-          <span className="text-ink-dim">{player.lastAction}</span>
+          <span className="text-sm font-semibold text-ink-dim">{player.lastAction}</span>
         ) : null}
       </div>
     </div>
