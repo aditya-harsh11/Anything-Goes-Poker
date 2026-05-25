@@ -8,8 +8,11 @@ interface Props {
   reactions: FloatingReaction[];
 }
 
-const DESIGN_W = 900;
-const DESIGN_H = 600;
+const DESIGN_W = 1150;
+const DESIGN_H = 767;
+// Cap the rendered table width so the host (who has a side panel) and non-hosts
+// (full width) see the same size instead of the table ballooning without a panel.
+const MAX_TABLE_W = 960;
 
 function statusBadge(p: PublicPlayer): { label: string; cls: string } | null {
   if (p.status === 'folded') return { label: 'Folded', cls: 'bg-black/50 text-ink-dim' };
@@ -126,7 +129,7 @@ export default function Table({ state, reactions }: Props) {
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const update = () => setScale(Math.min(1, el.clientWidth / DESIGN_W));
+    const update = () => setScale(Math.min(el.clientWidth, MAX_TABLE_W) / DESIGN_W);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
