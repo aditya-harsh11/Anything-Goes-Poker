@@ -9,7 +9,7 @@ import type {
   PlayerStatus,
   PlayerAction,
 } from '@poker/shared';
-import { VARIANTS } from '@poker/shared';
+import { VARIANTS, type Variant } from '@poker/shared';
 import { PokerGame } from '../engine/pokerGame';
 
 const genToken = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 20);
@@ -178,6 +178,14 @@ export class Room {
     const v = Math.max(0, Math.floor(value));
     if (v > p.stack) p.totalBoughtIn += v - p.stack;
     p.stack = v;
+  }
+
+  /** Set the variant for the next hand (only allowed between hands). */
+  setVariant(variant: string): boolean {
+    if (!(variant in VARIANTS)) return false;
+    if (this.game && !this.game.isComplete()) return false;
+    this.settings = { ...this.settings, variant: variant as Variant };
+    return true;
   }
 
   /** Re-bind a reconnecting socket to an existing seat or pending request via its token. */

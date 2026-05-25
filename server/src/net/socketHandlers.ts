@@ -253,6 +253,12 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
+    socket.on('hostSetVariant', (variant) => {
+      const room = currentRoom();
+      if (!room || !requireHost(room)) return;
+      if (room.setVariant(String(variant))) broadcast(io, room);
+    });
+
     socket.on('disconnect', () => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;

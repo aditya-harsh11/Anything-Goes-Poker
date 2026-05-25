@@ -1,4 +1,5 @@
 import type { Card } from './cards';
+import type { Variant } from './variants';
 import type { RoomSettings, RoomState } from './state';
 
 /** A player's intent for their turn. For bet/raise, `amount` is the TOTAL "to" amount. */
@@ -49,6 +50,8 @@ export interface ClientToServerEvents {
   hostRemovePlayer: (playerId: string) => void;
   /** Force a manual-select showdown to resolve (auto-picks best for anyone who hasn't chosen). */
   hostForceShowdown: () => void;
+  /** Choose the variant for the next hand (only allowed between hands). */
+  hostSetVariant: (variant: Variant) => void;
 }
 
 export interface ServerToClientEvents {

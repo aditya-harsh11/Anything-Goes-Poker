@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { type RoomSettings, type Variant, VARIANT_LIST, VARIANTS } from '@poker/shared';
+import type { RoomSettings } from '@poker/shared';
 import { createRoom } from '../lib/api';
 import { saveSession } from '../lib/session';
 
 export default function Home() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
-  const [variant, setVariant] = useState<Variant>('texas');
   const [smallBlind, setSmallBlind] = useState(5);
   const [bigBlind, setBigBlind] = useState(10);
   const [startingStack, setStartingStack] = useState(1000);
@@ -19,7 +18,7 @@ export default function Home() {
     e.preventDefault();
     setBusy(true);
     const settings: RoomSettings = {
-      variant,
+      variant: 'texas', // starting variant; the host changes it per hand at the table
       smallBlind,
       bigBlind,
       startingStack,
@@ -55,17 +54,7 @@ export default function Home() {
           <label className={label}>Your name</label>
           <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Host" />
         </div>
-        <div>
-          <label className={label}>Variant</label>
-          <select className={field} value={variant} onChange={(e) => setVariant(e.target.value as Variant)}>
-            {VARIANT_LIST.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">{VARIANTS[variant].description}</p>
-        </div>
+        <p className="text-xs text-slate-500">You'll choose the variant for each hand at the table.</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Small blind</label>

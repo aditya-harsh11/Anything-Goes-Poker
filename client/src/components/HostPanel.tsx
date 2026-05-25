@@ -1,4 +1,4 @@
-import type { RoomState } from '@poker/shared';
+import { type RoomState, type Variant, VARIANT_LIST, VARIANTS } from '@poker/shared';
 import { api } from '../lib/api';
 
 interface Props {
@@ -21,6 +21,22 @@ export default function HostPanel({ state }: Props) {
     <aside className="flex w-72 shrink-0 flex-col gap-4 rounded-xl bg-slate-900 p-4">
       <div>
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-400">Host controls</h2>
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Variant (next hand)
+        </label>
+        <select
+          value={settings.variant}
+          disabled={handInProgress}
+          onChange={(e) => api.setVariant(e.target.value as Variant)}
+          className="mb-1 w-full rounded-lg bg-slate-800 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+        >
+          {VARIANT_LIST.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+        <p className="mb-2 text-xs text-slate-500">{VARIANTS[settings.variant].description}</p>
         <button
           onClick={() => api.startHand()}
           disabled={handInProgress || eligible < 2}

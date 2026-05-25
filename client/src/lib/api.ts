@@ -4,6 +4,7 @@ import type {
   JoinRoomAck,
   RejoinAck,
   PlayerAction,
+  Variant,
 } from '@poker/shared';
 import { socket } from './socket';
 
@@ -34,4 +35,5 @@ export const api = {
   adjustStack: (playerId: string, delta: number) => socket.emit('hostAdjustStack', { playerId, delta }),
   setStack: (playerId: string, value: number) => socket.emit('hostSetStack', { playerId, value }),
   removePlayer: (playerId: string) => socket.emit('hostRemovePlayer', playerId),
+  setVariant: (variant: Variant) => socket.emit('hostSetVariant', variant),
 };
