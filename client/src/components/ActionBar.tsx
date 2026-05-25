@@ -77,8 +77,9 @@ export default function ActionBar({ state, onAct }: Props) {
             min={av.minRaiseTo}
             max={av.maxRaiseTo}
             value={raiseTo}
-            onChange={(e) => setRaiseTo(clamp(Number(e.target.value)))}
-            className="field w-16 px-1 text-right font-mono"
+            onChange={(e) => setRaiseTo(Number(e.target.value))}
+            onBlur={() => setRaiseTo(clamp(raiseTo))}
+            className="w-24 rounded-lg border border-brass/30 bg-black/40 px-2 py-1.5 text-center font-mono text-lg font-bold text-ink outline-none focus:border-brass/60"
           />
           <div className="flex gap-1.5">
             {quick.map((q) => (

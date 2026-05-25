@@ -16,9 +16,10 @@ export function solve(hole: Card[], board: Card[]): PokerHand {
   return Hand.solve(cards);
 }
 
-/** Human-readable description, e.g. "Two Pair, A's & K's". */
+/** Human-readable description, e.g. "Two Pair, A's & K's" or "Flush, K High"
+ *  (the trailing suit letter on flush/high-card kickers is stripped). */
 export function describe(hand: PokerHand): string {
-  return hand.descr;
+  return hand.descr.replace(/\b(10|[2-9TJQKA])[shdc]\b/g, '$1');
 }
 
 /** >0 if a beats b, 0 if tie, <0 if b beats a. */
