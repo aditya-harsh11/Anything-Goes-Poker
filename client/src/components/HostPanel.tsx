@@ -17,18 +17,19 @@ export default function HostPanel({ state }: Props) {
     if (Number.isFinite(value)) api.setStack(playerId, value);
   };
 
+  const heading = 'mb-2 font-display text-lg text-brass-bright';
+  const label = 'mb-1 block text-[11px] font-semibold uppercase tracking-[0.15em] text-ink-dim';
+
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-4 rounded-xl bg-slate-900 p-4">
+    <aside className="panel flex w-full shrink-0 flex-col gap-5 rounded-2xl p-4 lg:w-72">
       <div>
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-400">Host controls</h2>
-        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Variant (next hand)
-        </label>
+        <h2 className={heading}>Host controls</h2>
+        <label className={label}>Variant — next hand</label>
         <select
           value={settings.variant}
           disabled={handInProgress}
           onChange={(e) => api.setVariant(e.target.value as Variant)}
-          className="mb-1 w-full rounded-lg bg-slate-800 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+          className="field mb-1 text-sm disabled:opacity-50"
         >
           {VARIANT_LIST.map((v) => (
             <option key={v.id} value={v.id}>
@@ -36,12 +37,13 @@ export default function HostPanel({ state }: Props) {
             </option>
           ))}
         </select>
-        <p className="mb-2 text-xs text-slate-500">{VARIANTS[settings.variant].description}</p>
+        <p className="mb-3 text-xs text-ink-dim">{VARIANTS[settings.variant].description}</p>
+
         {game.handNumber === 0 && (
           <button
             onClick={() => api.shuffleSeats()}
             disabled={players.length < 2}
-            className="mb-2 w-full rounded-lg bg-slate-700 py-2 text-sm font-semibold hover:bg-slate-600 disabled:opacity-40"
+            className="btn btn-ghost mb-2 w-full py-2 text-sm"
           >
             🔀 Shuffle seats
           </button>
@@ -49,38 +51,28 @@ export default function HostPanel({ state }: Props) {
         <button
           onClick={() => api.startHand()}
           disabled={handInProgress || eligible < 2}
-          className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
+          className="btn btn-emerald w-full py-2.5"
         >
           {handInProgress ? 'Hand in progress' : 'Start hand'}
         </button>
-        {eligible < 2 && (
-          <p className="mt-1 text-xs text-slate-500">Need at least 2 players with chips.</p>
-        )}
+        {eligible < 2 && <p className="mt-1 text-xs text-ink-dim">Need at least 2 players with chips.</p>}
       </div>
 
       {joinRequests.length > 0 && (
         <div>
-          <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-400">
-            Join requests
-          </h3>
+          <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brass">Join requests</h3>
           <ul className="flex flex-col gap-2">
             {joinRequests.map((r) => (
-              <li key={r.requestId} className="rounded-lg bg-slate-800 p-2 text-sm">
+              <li key={r.requestId} className="rounded-xl bg-black/30 p-3 ring-1 ring-brass/10">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">{r.name}</span>
                   <span className="font-mono text-emerald-300">{r.buyIn.toLocaleString()}</span>
                 </div>
-                <div className="mt-1 flex gap-2">
-                  <button
-                    onClick={() => api.approveJoin(r.requestId)}
-                    className="flex-1 rounded bg-emerald-600 py-1 text-xs font-semibold hover:bg-emerald-500"
-                  >
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => api.approveJoin(r.requestId)} className="btn btn-emerald flex-1 py-1.5 text-xs">
                     Approve
                   </button>
-                  <button
-                    onClick={() => api.rejectJoin(r.requestId)}
-                    className="flex-1 rounded bg-rose-700 py-1 text-xs font-semibold hover:bg-rose-600"
-                  >
+                  <button onClick={() => api.rejectJoin(r.requestId)} className="btn btn-danger flex-1 py-1.5 text-xs">
                     Decline
                   </button>
                 </div>
@@ -91,10 +83,10 @@ export default function HostPanel({ state }: Props) {
       )}
 
       <div>
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Manage chips</h3>
+        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-ink-dim">Manage chips</h3>
         <ul className="flex flex-col gap-2">
           {players.map((p) => (
-            <li key={p.id} className="rounded-lg bg-slate-800 p-3 text-sm">
+            <li key={p.id} className="rounded-xl bg-black/30 p-3 ring-1 ring-brass/10">
               <div className="mb-2 flex items-center justify-between">
                 <span className="truncate font-semibold">{p.name}</span>
                 <span className="font-mono font-bold text-emerald-300">{p.stack.toLocaleString()}</span>
@@ -102,21 +94,15 @@ export default function HostPanel({ state }: Props) {
               <div className="flex gap-2">
                 <button
                   onClick={() => api.adjustStack(p.id, settings.startingStack)}
-                  className="flex flex-1 items-center justify-center rounded-md bg-slate-700 px-2 py-1.5 text-xs font-semibold hover:bg-slate-600"
+                  className="btn btn-ghost flex-1 py-1.5 text-xs"
                 >
                   + buy-in
                 </button>
-                <button
-                  onClick={() => promptSet(p.id, p.stack)}
-                  className="flex flex-1 items-center justify-center rounded-md bg-slate-700 px-2 py-1.5 text-xs font-semibold hover:bg-slate-600"
-                >
+                <button onClick={() => promptSet(p.id, p.stack)} className="btn btn-ghost flex-1 py-1.5 text-xs">
                   Set
                 </button>
                 {p.id !== state.hostId && (
-                  <button
-                    onClick={() => api.removePlayer(p.id)}
-                    className="flex flex-1 items-center justify-center rounded-md bg-rose-600 px-2 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
-                  >
+                  <button onClick={() => api.removePlayer(p.id)} className="btn btn-danger flex-1 py-1.5 text-xs">
                     Kick
                   </button>
                 )}

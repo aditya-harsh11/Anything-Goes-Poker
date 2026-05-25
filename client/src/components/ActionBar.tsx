@@ -13,16 +13,15 @@ export default function ActionBar({ state, onAct }: Props) {
 
   const [raiseTo, setRaiseTo] = useState(av?.minRaiseTo ?? 0);
 
-  // Reset the raise amount each time it becomes our turn / the minimum changes.
   useEffect(() => {
     if (av) setRaiseTo(av.minRaiseTo);
   }, [av?.minRaiseTo, av?.maxRaiseTo, state.game.toAct]);
 
   if (!isMyTurn || !av || !me) {
     return (
-      <div className="flex h-20 items-center justify-center text-sm text-slate-500">
+      <div className="flex h-16 items-center justify-center text-sm text-ink-dim">
         {state.game.toAct
-          ? `Waiting for ${state.players.find((p) => p.id === state.game.toAct)?.name ?? 'player'}…`
+          ? `Waiting on ${state.players.find((p) => p.id === state.game.toAct)?.name ?? 'player'}…`
           : 'Waiting for the next hand…'}
       </div>
     );
@@ -41,28 +40,22 @@ export default function ActionBar({ state, onAct }: Props) {
   ];
 
   return (
-    <div className="flex h-20 items-center justify-center gap-4 px-4">
+    <div className="flex min-h-16 flex-wrap items-center justify-center gap-3 px-2 py-2">
       <div className="flex gap-2">
         {!av.canCheck && (
-          <button
-            onClick={() => onAct({ type: 'fold' })}
-            className="rounded-lg bg-rose-700 px-5 py-3 font-semibold text-white hover:bg-rose-600"
-          >
+          <button onClick={() => onAct({ type: 'fold' })} className="btn btn-danger px-6 py-3">
             Fold
           </button>
         )}
         {av.canCheck ? (
-          <button
-            onClick={() => onAct({ type: 'check' })}
-            className="rounded-lg bg-slate-600 px-5 py-3 font-semibold text-white hover:bg-slate-500"
-          >
+          <button onClick={() => onAct({ type: 'check' })} className="btn btn-ghost px-6 py-3">
             Check
           </button>
         ) : (
           <button
             onClick={() => onAct({ type: 'call' })}
             disabled={!av.canCall}
-            className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            className="btn btn-emerald px-6 py-3"
           >
             Call {av.callAmount.toLocaleString()}
           </button>
@@ -70,14 +63,14 @@ export default function ActionBar({ state, onAct }: Props) {
       </div>
 
       {canAggress && (
-        <div className="flex items-center gap-3 rounded-lg bg-slate-800 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-black/30 px-3 py-2 ring-1 ring-brass/15">
           <input
             type="range"
             min={av.minRaiseTo}
             max={av.maxRaiseTo}
             value={raiseTo}
             onChange={(e) => setRaiseTo(Number(e.target.value))}
-            className="w-40"
+            className="w-36 accent-[#c9a66b]"
           />
           <input
             type="number"
@@ -85,22 +78,18 @@ export default function ActionBar({ state, onAct }: Props) {
             max={av.maxRaiseTo}
             value={raiseTo}
             onChange={(e) => setRaiseTo(clamp(Number(e.target.value)))}
-            className="w-24 rounded bg-slate-900 px-2 py-1 text-right font-mono"
+            className="field w-24 text-right font-mono"
           />
-          <div className="flex gap-1">
+          <div className="flex gap-1.5">
             {quick.map((q) => (
-              <button
-                key={q.label}
-                onClick={() => setRaiseTo(q.to)}
-                className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
-              >
+              <button key={q.label} onClick={() => setRaiseTo(q.to)} className="btn btn-ghost px-3.5 py-2 text-sm">
                 {q.label}
               </button>
             ))}
           </div>
           <button
             onClick={() => onAct({ type: av.canBet ? 'bet' : 'raise', amount: clamp(raiseTo) })}
-            className="rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-500"
+            className="btn btn-gold px-6 py-3"
           >
             {aggressLabel} {clamp(raiseTo).toLocaleString()}
           </button>

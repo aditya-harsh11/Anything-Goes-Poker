@@ -8,9 +8,9 @@ interface Props {
 }
 
 function statusBadge(p: PublicPlayer): { label: string; cls: string } | null {
-  if (p.status === 'folded') return { label: 'Folded', cls: 'bg-slate-600' };
-  if (p.status === 'allin') return { label: 'All-in', cls: 'bg-amber-600' };
-  if (p.status === 'sittingout') return { label: 'Out', cls: 'bg-slate-700' };
+  if (p.status === 'folded') return { label: 'Folded', cls: 'bg-black/50 text-ink-dim' };
+  if (p.status === 'allin') return { label: 'All-in', cls: 'bg-brass text-black' };
+  if (p.status === 'sittingout') return { label: 'Out', cls: 'bg-black/50 text-ink-dim' };
   return null;
 }
 
@@ -18,7 +18,7 @@ function statusBadge(p: PublicPlayer): { label: string; cls: string } | null {
 function seatPosition(seat: number, mySeat: number, n: number): { x: number; y: number } {
   const displayIndex = (seat - mySeat + n) % n;
   const theta = Math.PI / 2 + (displayIndex * 2 * Math.PI) / n;
-  return { x: 50 + 46 * Math.cos(theta), y: 50 + 45 * Math.sin(theta) };
+  return { x: 50 + 47 * Math.cos(theta), y: 50 + 38 * Math.sin(theta) };
 }
 
 function Seat({
@@ -28,6 +28,7 @@ function Seat({
   isLeader,
   isSmallBlind,
   isBigBlind,
+  hideCards,
 }: {
   player: PublicPlayer;
   isYou: boolean;
@@ -35,52 +36,55 @@ function Seat({
   isLeader: boolean;
   isSmallBlind: boolean;
   isBigBlind: boolean;
+  hideCards: boolean;
 }) {
   const badge = statusBadge(player);
   const dimmed = player.status === 'folded' || player.status === 'sittingout';
   const visible = player.holeCards ?? [];
 
-  // Your own faces live in the bottom tray; your pod shows backs to avoid duplication.
-  const faceCards: Card[] = isYou ? [] : visible;
-  const backCount = isYou ? visible.length + player.cardBacks : player.cardBacks;
-  const hasCards = faceCards.length > 0 || backCount > 0;
+  // Your own real cards sit in your pod; others show backs (and shown faces at showdown).
+  let faceCards: Card[] = [];
+  let backCount = 0;
+  if (isYou) {
+    faceCards = hideCards ? [] : visible; // while choosing, cards move to the action tray
+  } else {
+    faceCards = visible;
+    backCount = player.cardBacks;
+  }
+  const selfSize = visible.length > 2 ? 'xs' : 'sm';
 
   return (
     <div
-      className={`flex w-36 flex-col items-center gap-1 rounded-xl border px-2 py-2 transition ${
-        isToAct ? 'active-glow border-yellow-400/70' : 'border-slate-700/80'
-      } ${dimmed ? 'opacity-55' : ''} bg-slate-900/95 shadow-lg`}
+      className={`panel flex w-36 flex-col items-center gap-1 rounded-2xl px-2 py-2 ${
+        isToAct ? 'active-glow' : ''
+      } ${dimmed ? 'opacity-55' : ''}`}
     >
-      <div className="flex h-10 items-center justify-center gap-0.5">
-        {hasCards ? (
-          <>
-            {faceCards.map((c, i) => <PlayingCard key={`v${i}`} card={c} size="xs" />)}
-            {Array.from({ length: backCount }).map((_, i) => <PlayingCard key={`b${i}`} hidden size="xs" />)}
-          </>
-        ) : (
-          <div className="h-10" />
-        )}
+      <div className="flex min-h-9 items-center justify-center gap-0.5">
+        {faceCards.map((c, i) => <PlayingCard key={`v${i}`} card={c} size={isYou ? selfSize : 'xs'} />)}
+        {Array.from({ length: backCount }).map((_, i) => <PlayingCard key={`b${i}`} hidden size="xs" />)}
       </div>
 
-      <div className="flex w-full items-center justify-between gap-1 text-sm">
-        <span className={`truncate font-semibold ${isLeader ? 'text-amber-300' : 'text-slate-100'}`}>
+      <div className="flex w-full items-center justify-between gap-1">
+        <span
+          className={`truncate text-sm font-semibold ${isLeader ? 'text-brass-bright' : 'text-ink'}`}
+        >
           {isLeader && '👑 '}
           {player.name}
           {isYou ? ' (you)' : ''}
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {player.isDealer && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-slate-900">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[10px] font-bold text-black">
               D
             </span>
           )}
           {isSmallBlind && (
-            <span className="flex h-5 items-center justify-center rounded-full bg-sky-400 px-1 text-[10px] font-bold text-slate-900">
+            <span className="flex h-5 items-center justify-center rounded-full bg-sky-300 px-1 text-[10px] font-bold text-black">
               SB
             </span>
           )}
           {isBigBlind && (
-            <span className="flex h-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+            <span className="flex h-5 items-center justify-center rounded-full bg-brass px-1 text-[10px] font-bold text-black">
               BB
             </span>
           )}
@@ -88,15 +92,20 @@ function Seat({
       </div>
 
       <div className="flex w-full items-center justify-between">
-        <span className="rounded-md bg-slate-800 px-2 py-0.5 font-mono text-base font-bold text-emerald-300">
+        <span className="font-mono text-base font-bold text-emerald-300">
           {player.stack.toLocaleString()}
         </span>
-        {!player.isConnected && <span className="text-xs text-rose-400">offline</span>}
+        {!player.isConnected && <span className="text-xs text-crimson">offline</span>}
       </div>
 
-      <div className="flex h-4 items-center gap-2 text-[11px]">
-        {badge && <span className={`rounded px-1.5 py-0.5 text-white ${badge.cls}`}>{badge.label}</span>}
-        {player.lastAction && !badge && <span className="text-slate-300">{player.lastAction}</span>}
+      <div className="flex min-h-4 items-center gap-2 text-center text-[11px] leading-tight">
+        {badge ? (
+          <span className={`rounded px-1.5 py-0.5 ${badge.cls}`}>{badge.label}</span>
+        ) : player.handName ? (
+          <span className="text-brass">{player.handName}</span>
+        ) : player.lastAction ? (
+          <span className="text-ink-dim">{player.lastAction}</span>
+        ) : null}
       </div>
     </div>
   );
@@ -104,6 +113,7 @@ function Seat({
 
 export default function Table({ state, reactions }: Props) {
   const { players, game, settings, youId } = state;
+  const choosing = !!(state.youMustSelect || state.youMustDiscard);
   const bySeat = new Map<number, PublicPlayer>();
   for (const p of players) bySeat.set(p.seat, p);
 
@@ -111,7 +121,6 @@ export default function Table({ state, reactions }: Props) {
   const mySeat = me ? me.seat : 0;
   const n = settings.maxSeats;
 
-  // Chip leader gets a gold name — but only once stacks have diverged.
   const maxStack = Math.max(0, ...players.map((p) => p.stack));
   const allEqual = players.every((p) => p.stack === maxStack);
 
@@ -122,7 +131,7 @@ export default function Table({ state, reactions }: Props) {
     seats.push(
       <div
         key={seat}
-        className="absolute -translate-x-1/2 -translate-y-1/2"
+        className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
         style={{ left: `${x}%`, top: `${y}%` }}
       >
         {player ? (
@@ -133,15 +142,16 @@ export default function Table({ state, reactions }: Props) {
             isLeader={!allEqual && player.stack === maxStack && maxStack > 0}
             isSmallBlind={game.smallBlindSeat === player.seat}
             isBigBlind={game.bigBlindSeat === player.seat}
+            hideCards={player.id === youId && choosing}
           />
         ) : (
-          <div className="flex h-24 w-36 items-center justify-center rounded-xl border-2 border-dashed border-slate-500/40 text-xs text-slate-400/70">
+          <div className="flex h-20 w-32 items-center justify-center rounded-2xl border-2 border-dashed border-brass/25 text-xs text-ink-dim/70">
             Seat {seat + 1}
           </div>
         )}
         {player && player.committedThisRound > 0 && (
           <div className="mt-1 flex justify-center">
-            <span className="rounded-full bg-black/60 px-2 py-0.5 text-xs font-bold text-yellow-300">
+            <span className="rounded-full bg-black/70 px-2 py-0.5 font-mono text-xs font-bold text-brass-bright ring-1 ring-brass/30">
               {player.committedThisRound.toLocaleString()}
             </span>
           </div>
@@ -152,47 +162,45 @@ export default function Table({ state, reactions }: Props) {
 
   return (
     <div className="relative mx-auto aspect-[3/2] w-full max-w-5xl">
-      <div className="felt absolute inset-[8%] rounded-[50%]" />
+      <div className="felt absolute inset-[7%] rounded-[48%]" />
 
-      {/* center: community cards + pot */}
       <div className="absolute left-1/2 top-1/2 flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2">
         {game.communityCards2.length > 0 && (
-          <span className="text-[11px] font-bold uppercase tracking-widest text-emerald-100/80">Board A</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-ink/70">Board A</span>
         )}
         <div className="flex gap-1.5">
           {game.communityCards.length > 0 ? (
             game.communityCards.map((c, i) => <PlayingCard key={i} card={c} size="md" />)
           ) : (
-            <span className="text-sm text-emerald-100/70">
-              {game.phase === 'waiting' ? 'Waiting for next hand' : ''}
+            <span className="font-display text-lg italic text-ink/55">
+              {game.phase === 'waiting' ? 'awaiting the deal' : ''}
             </span>
           )}
         </div>
         {game.communityCards2.length > 0 && (
           <>
-            <span className="mt-1 text-[11px] font-bold uppercase tracking-widest text-emerald-100/80">Board B</span>
+            <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-ink/70">Board B</span>
             <div className="flex gap-1.5">
               {game.communityCards2.map((c, i) => <PlayingCard key={i} card={c} size="md" />)}
             </div>
           </>
         )}
         {game.totalPot > 0 && (
-          <div className="mt-1 rounded-full bg-slate-950/80 px-5 py-1.5 text-lg font-bold text-amber-300 ring-1 ring-amber-400/30">
-            Pot {game.totalPot.toLocaleString()}
+          <div className="mt-1 rounded-full bg-black/70 px-5 py-1.5 font-mono text-lg font-bold text-brass-bright ring-1 ring-brass/40">
+            {game.totalPot.toLocaleString()}
           </div>
         )}
       </div>
 
       {seats}
 
-      {/* floating emoji reactions over the sender's seat */}
       {reactions.map((r) => {
         const p = players.find((pl) => pl.id === r.fromId);
         const pos = p ? seatPosition(p.seat, mySeat, n) : { x: 50, y: 60 };
         return (
           <div
             key={r.id}
-            className="reaction-float pointer-events-none absolute z-20 text-4xl drop-shadow-lg"
+            className="reaction-float pointer-events-none absolute z-30 text-5xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
             style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
           >
             {r.emoji}

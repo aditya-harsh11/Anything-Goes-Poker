@@ -14,12 +14,12 @@ function ResultBanner({ state }: { state: RoomState }) {
   const r = state.lastResult;
   if (!r || state.game.phase !== 'showdown') return null;
   return (
-    <div className="rounded-lg bg-black/50 px-4 py-2 text-center text-sm">
+    <div className="rounded-xl bg-black/40 px-4 py-2 text-center text-sm ring-1 ring-brass/20">
       {r.winners.length === 0 ? (
-        <span className="text-slate-300">Hand complete</span>
+        <span className="text-ink-dim">Hand complete</span>
       ) : (
         r.winners.map((w, i) => (
-          <span key={`${w.playerId}-${w.board ?? w.label ?? ''}-${i}`} className="mr-3 font-semibold text-yellow-300">
+          <span key={`${w.playerId}-${w.board ?? w.label ?? ''}-${i}`} className="mr-3 font-semibold text-brass-bright">
             {w.name} wins {w.amount.toLocaleString()}
             {w.label ? ` (${w.label})` : w.board ? ` (Board ${w.board})` : ''}
           </span>
@@ -29,11 +29,8 @@ function ResultBanner({ state }: { state: RoomState }) {
   );
 }
 
-/**
- * Shows the viewer's own cards large. In Crazy Pineapple they pick a card to discard;
- * at a manual-select showdown they pick which cards to use.
- */
-function PlayerHand({ state }: { state: RoomState }) {
+/** Only rendered when the player must choose cards (select or discard). */
+function ChooseTray({ state }: { state: RoomState }) {
   const me = state.players.find((p) => p.id === state.youId);
   const cards = me?.holeCards ?? [];
   const variant = VARIANTS[state.settings.variant];
@@ -44,78 +41,53 @@ function PlayerHand({ state }: { state: RoomState }) {
       : 'none';
   const [sel, setSel] = useState<number[]>([]);
 
-  if (cards.length === 0) return null;
+  if (mode === 'none' || cards.length === 0) return null;
 
   const toggle = (i: number) => {
-    if (mode === 'discard') {
-      setSel((cur) => (cur[0] === i ? [] : [i]));
-    } else {
-      setSel((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]));
-    }
+    if (mode === 'discard') setSel((cur) => (cur[0] === i ? [] : [i]));
+    else setSel((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]));
   };
-  const ringColor = mode === 'discard' ? 'ring-rose-400' : 'ring-emerald-400';
+  const ringColor = mode === 'discard' ? 'ring-crimson' : 'ring-emerald-400';
   const canConfirm = mode === 'discard' ? sel.length === 1 : variant.allowedHoleCounts.includes(sel.length);
-
-  const confirm = () => {
-    if (mode === 'discard') api.discardCard(sel[0]);
-    else api.selectCards(sel);
-  };
+  const confirm = () => (mode === 'discard' ? api.discardCard(sel[0]) : api.selectCards(sel));
 
   return (
-    <div className="flex flex-col items-center gap-1 py-2">
-      {mode === 'none' && (
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Your hand</span>
-      )}
+    <div className="flex flex-col items-center gap-2 border-b border-brass/15 pb-3">
       <div className="flex items-end gap-2">
         {cards.map((card, i) => {
           const selected = sel.includes(i);
           return (
             <button
               key={i}
-              onClick={mode !== 'none' ? () => toggle(i) : undefined}
-              className={`rounded-md transition ${mode !== 'none' ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'} ${
-                selected ? `-translate-y-2 rounded-lg ring-4 ${ringColor}` : ''
-              }`}
+              onClick={() => toggle(i)}
+              className={`rounded-lg transition hover:-translate-y-1 ${selected ? `-translate-y-2 ring-4 ${ringColor}` : ''}`}
             >
               <PlayingCard card={card} size="md" />
             </button>
           );
         })}
       </div>
-      {mode === 'discard' && (
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-300">Pick a card to discard — {sel.length}/1 chosen</span>
-          <button
-            disabled={!canConfirm}
-            onClick={confirm}
-            className="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white hover:bg-rose-500 disabled:opacity-40"
-          >
-            Discard
-          </button>
-        </div>
-      )}
-      {mode === 'select' && (
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-300">
-            {variant.blackjack
-              ? 'Pick 2 cards for poker (the other 2 are your blackjack hand)'
-              : `Choose ${selectionHint(variant.allowedHoleCounts)}`}{' '}
-            — {sel.length} selected
-          </span>
-          <button
-            disabled={!canConfirm}
-            onClick={confirm}
-            className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
-          >
-            Confirm
-          </button>
-        </div>
-      )}
+      <div className="flex items-center gap-3 text-sm">
+        <span className="text-ink-dim">
+          {mode === 'discard'
+            ? `Pick a card to discard — ${sel.length}/1`
+            : variant.blackjack
+              ? 'Pick 2 cards for poker (other 2 = blackjack)'
+              : `Choose ${selectionHint(variant.allowedHoleCounts)}`}
+        </span>
+        <button
+          disabled={!canConfirm}
+          onClick={confirm}
+          className={`btn px-5 py-2 ${mode === 'discard' ? 'btn-danger' : 'btn-emerald'}`}
+        >
+          {mode === 'discard' ? 'Discard' : 'Confirm'}
+        </button>
+      </div>
     </div>
   );
 }
 
-/** After a hand, let the player opt to reveal their own hole cards. */
+/** After a hand, let the player reveal their own cards. */
 function ShowHandControls({ state }: { state: RoomState }) {
   const me = state.players.find((p) => p.id === state.youId);
   const cards = me?.holeCards ?? [];
@@ -124,84 +96,30 @@ function ShowHandControls({ state }: { state: RoomState }) {
   const allShown = cards.every((_, i) => shown.includes(i));
 
   return (
-    <div className="flex items-center justify-center gap-2 py-2 text-sm">
-      <span className="text-slate-400">Show your cards:</span>
+    <div className="flex items-center justify-center gap-2 py-1 text-sm">
+      <span className="text-ink-dim">Show:</span>
       {cards.map((c, i) => (
-        <button
-          key={i}
-          disabled={shown.includes(i)}
-          onClick={() => api.showCards([i])}
-          className="rounded bg-slate-700 px-3 py-1.5 hover:bg-slate-600 disabled:opacity-40"
-        >
-          {shown.includes(i) ? 'Shown ' : 'Show '}
+        <button key={i} disabled={shown.includes(i)} onClick={() => api.showCards([i])} className="btn btn-ghost px-3 py-1.5">
+          {shown.includes(i) ? 'Shown ' : ''}
           {c.rank}
-          {SUIT_SYMBOL[c.suit]}
+          <span className={c.suit === 'h' || c.suit === 'd' ? 'text-crimson' : ''}>{SUIT_SYMBOL[c.suit]}</span>
         </button>
       ))}
-      <button
-        disabled={allShown}
-        onClick={() => api.showCards(cards.map((_, i) => i))}
-        className="rounded bg-indigo-600 px-3 py-1.5 font-semibold hover:bg-indigo-500 disabled:opacity-40"
-      >
+      <button disabled={allShown} onClick={() => api.showCards(cards.map((_, i) => i))} className="btn btn-gold px-3 py-1.5">
         Show both
       </button>
     </div>
   );
 }
 
-/** Buy-in / stack / net summary for settling up after the session. */
-function Ledger({ state, onClose }: { state: RoomState; onClose: () => void }) {
-  const rows = [...state.players].sort((a, b) => b.netResult - a.netResult);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl bg-slate-900 p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Ledger</h2>
-          <button onClick={onClose} className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600">
-            Close
-          </button>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-              <th className="pb-1">Player</th>
-              <th className="pb-1 text-right">Bought in</th>
-              <th className="pb-1 text-right">Stack</th>
-              <th className="pb-1 text-right">Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.id} className="border-t border-slate-800">
-                <td className="py-1.5 font-medium">{p.name}</td>
-                <td className="py-1.5 text-right font-mono text-slate-300">{p.boughtIn.toLocaleString()}</td>
-                <td className="py-1.5 text-right font-mono text-emerald-300">{p.stack.toLocaleString()}</td>
-                <td
-                  className={`py-1.5 text-right font-mono ${p.netResult >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}
-                >
-                  {p.netResult >= 0 ? '+' : ''}
-                  {p.netResult.toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-3 text-xs text-slate-500">
-          Net = current stack − total bought in. Positive is up for the session, negative is down.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function ReactionBar() {
   return (
-    <div className="flex items-center justify-center gap-1 border-t border-slate-800 pt-2">
+    <div className="flex items-center justify-center gap-1 rounded-full bg-black/35 px-3 py-1 ring-1 ring-brass/15">
       {REACTIONS.map((e) => (
         <button
           key={e}
           onClick={() => api.sendReaction(e)}
-          className="rounded-md px-2 py-1 text-2xl transition hover:scale-125 hover:bg-slate-800"
+          className="rounded-full px-1.5 py-0.5 text-2xl transition hover:scale-125 hover:bg-white/5"
           title="Throw a reaction"
         >
           {e}
@@ -216,18 +134,58 @@ function ShareBar({ roomId }: { roomId: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="text-slate-400">Invite:</span>
-      <code className="rounded bg-slate-800 px-2 py-1 text-emerald-300">{url}</code>
+      <span className="text-ink-dim">Invite</span>
+      <code className="rounded-md bg-black/40 px-2 py-1 text-brass ring-1 ring-brass/15">{roomId}</code>
       <button
         onClick={() => {
           navigator.clipboard.writeText(url);
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
-        className="rounded bg-slate-700 px-2 py-1 text-xs hover:bg-slate-600"
+        className="btn btn-ghost px-2.5 py-1 text-xs"
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? 'Copied!' : 'Copy link'}
       </button>
+    </div>
+  );
+}
+
+function Ledger({ state, onClose }: { state: RoomState; onClose: () => void }) {
+  const rows = [...state.players].sort((a, b) => b.netResult - a.netResult);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="panel w-full max-w-md rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-2xl text-brass-bright">Ledger</h2>
+          <button onClick={onClose} className="btn btn-ghost px-3 py-1 text-xs">
+            Close
+          </button>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-ink-dim">
+              <th className="pb-1">Player</th>
+              <th className="pb-1 text-right">Bought in</th>
+              <th className="pb-1 text-right">Stack</th>
+              <th className="pb-1 text-right">Net</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => (
+              <tr key={p.id} className="border-t border-brass/10">
+                <td className="py-1.5 font-medium">{p.name}</td>
+                <td className="py-1.5 text-right font-mono text-ink-dim">{p.boughtIn.toLocaleString()}</td>
+                <td className="py-1.5 text-right font-mono text-emerald-300">{p.stack.toLocaleString()}</td>
+                <td className={`py-1.5 text-right font-mono ${p.netResult >= 0 ? 'text-emerald-400' : 'text-crimson'}`}>
+                  {p.netResult >= 0 ? '+' : ''}
+                  {p.netResult.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-3 text-xs text-ink-dim">Net = current stack − total bought in.</p>
+      </div>
     </div>
   );
 }
@@ -243,8 +201,6 @@ export default function GameRoom() {
   const [name, setName] = useState('');
   const [showLedger, setShowLedger] = useState(false);
 
-  // Register/re-register our session on first connect AND on every reconnect, so a
-  // dropped socket automatically reclaims our seat instead of going "offline".
   useEffect(() => {
     const attemptRejoin = () => {
       const session = loadSession(roomId);
@@ -253,15 +209,13 @@ export default function GameRoom() {
         return;
       }
       rejoin(roomId, session.token).then((ack) => {
-        if (ack.ok) {
-          setNeedJoin(false);
-        } else {
+        if (ack.ok) setNeedJoin(false);
+        else {
           clearSession(roomId);
           setNeedJoin(true);
         }
       });
     };
-
     if (socket.connected) attemptRejoin();
     socket.on('connect', attemptRejoin);
     return () => {
@@ -288,28 +242,19 @@ export default function GameRoom() {
     navigate('/');
   };
 
-  // Join form (no session yet).
   if (needJoin && !state) {
     return (
       <div className="mx-auto flex min-h-full max-w-sm flex-col justify-center gap-4 p-6">
-        <h1 className="text-center text-2xl font-bold text-emerald-400">Join game</h1>
-        <p className="text-center text-sm text-slate-400">
-          Room <code className="text-emerald-300">{roomId}</code>
+        <h1 className="text-center font-display text-3xl text-brass-bright">Take a seat</h1>
+        <p className="text-center text-sm text-ink-dim">
+          Room <code className="text-brass">{roomId}</code>
         </p>
-        <form onSubmit={doJoin} className="flex flex-col gap-3 rounded-2xl bg-slate-900 p-6">
-          <input
-            className="rounded-lg bg-slate-800 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <button
-            disabled={busy}
-            className="rounded-lg bg-emerald-600 py-2.5 font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-          >
+        <form onSubmit={doJoin} className="panel flex flex-col gap-3 rounded-2xl p-6">
+          <input className="field" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+          <button disabled={busy} className="btn btn-gold py-3">
             {busy ? 'Joining…' : 'Request to join'}
           </button>
-          <p className="text-center text-xs text-slate-500">The host sets your chips once you're approved.</p>
+          <p className="text-center text-xs text-ink-dim">The host sets your chips once you're approved.</p>
         </form>
       </div>
     );
@@ -317,7 +262,7 @@ export default function GameRoom() {
 
   if (!state) {
     return (
-      <div className="flex min-h-full items-center justify-center text-slate-400">
+      <div className="flex min-h-full items-center justify-center font-display text-xl text-ink-dim">
         {connected ? 'Loading table…' : 'Connecting…'}
       </div>
     );
@@ -326,74 +271,68 @@ export default function GameRoom() {
   const me = state.players.find((p) => p.id === state.youId);
 
   return (
-    <div className="mx-auto flex min-h-full max-w-7xl flex-col gap-3 p-4">
+    <div className="mx-auto flex min-h-full max-w-7xl flex-col gap-3 p-3 sm:p-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-emerald-400">♠ Card Room</h1>
-          <span className="rounded-md bg-indigo-500/20 px-2.5 py-1 text-sm font-bold text-indigo-200 ring-1 ring-indigo-400/30">
+          <h1 className="font-display text-2xl font-semibold text-brass-bright">Card Room</h1>
+          <span className="rounded-md bg-brass/15 px-2.5 py-1 text-sm font-semibold text-brass-bright ring-1 ring-brass/30">
             {VARIANTS[state.settings.variant].name}
           </span>
-          <span className="text-xs text-slate-300">
-            {state.settings.smallBlind}/{state.settings.bigBlind} blinds · hand #{state.game.handNumber}
+          <span className="text-xs text-ink-dim">
+            {state.settings.smallBlind}/{state.settings.bigBlind} · hand #{state.game.handNumber}
           </span>
         </div>
         <ShareBar roomId={state.roomId} />
         <div className="flex items-center gap-2">
-          {!connected && <span className="text-xs text-rose-400">reconnecting…</span>}
-          <button
-            onClick={() => setShowLedger(true)}
-            className="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600"
-          >
+          {!connected && <span className="text-xs text-crimson">reconnecting…</span>}
+          <button onClick={() => setShowLedger(true)} className="btn btn-ghost px-3 py-1.5 text-sm">
             Ledger
           </button>
           {me && me.status === 'sittingout' ? (
-            <button onClick={() => api.sitIn()} className="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600">
+            <button onClick={() => api.sitIn()} className="btn btn-ghost px-3 py-1.5 text-sm">
               Sit in
             </button>
           ) : (
             me && (
-              <button onClick={() => api.sitOut()} className="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600">
+              <button onClick={() => api.sitOut()} className="btn btn-ghost px-3 py-1.5 text-sm">
                 Sit out
               </button>
             )
           )}
-          <button onClick={leave} className="rounded bg-rose-800 px-3 py-1.5 text-sm hover:bg-rose-700">
+          <button onClick={leave} className="btn btn-danger px-3 py-1.5 text-sm">
             Leave
           </button>
         </div>
       </header>
 
       {state.youStatus === 'pending' && (
-        <div className="rounded-lg bg-amber-900/60 px-4 py-2 text-center text-sm text-amber-200">
+        <div className="rounded-xl bg-brass/15 px-4 py-2 text-center text-sm text-brass-bright ring-1 ring-brass/25">
           Waiting for the host to approve you…
         </div>
       )}
       {error && (
-        <div className="rounded-lg bg-rose-900/70 px-4 py-2 text-center text-sm text-rose-200">{error}</div>
+        <div className="rounded-xl bg-crimson/20 px-4 py-2 text-center text-sm text-crimson ring-1 ring-crimson/30">
+          {error}
+        </div>
       )}
 
-      <div className="flex flex-1 gap-4">
+      <div className="flex flex-1 flex-col gap-4 lg:flex-row">
         <main className="flex flex-1 flex-col gap-3">
           <ResultBanner state={state} />
           <Table state={state} reactions={reactions} />
-          <div className="flex flex-col rounded-xl bg-slate-900 p-2">
+          <div className="panel relative z-10 flex flex-col gap-1 rounded-2xl p-3">
             {state.youNote && (
-              <div className="mb-1 rounded-lg bg-sky-900/60 px-4 py-2 text-center text-sm text-sky-200">
+              <div className="rounded-lg bg-emerald-500/10 px-4 py-2 text-center text-sm text-emerald-200 ring-1 ring-emerald-400/20">
                 💡 {state.youNote}
               </div>
             )}
-            <PlayerHand key={state.game.handNumber} state={state} />
+            <ChooseTray key={state.game.handNumber} state={state} />
             {((state.game.awaitingSelection && !state.youMustSelect) ||
               (state.game.awaitingDiscard && !state.youMustDiscard)) && (
-              <div className="flex items-center justify-center gap-3 py-1 text-sm text-slate-400">
-                {state.game.awaitingDiscard
-                  ? 'Waiting for players to discard…'
-                  : 'Waiting for players to choose their cards…'}
+              <div className="flex items-center justify-center gap-3 py-1 text-sm text-ink-dim">
+                {state.game.awaitingDiscard ? 'Waiting for players to discard…' : 'Waiting for players to choose…'}
                 {state.youAreHost && (
-                  <button
-                    onClick={() => api.forceShowdown()}
-                    className="rounded bg-slate-700 px-3 py-1 text-xs hover:bg-slate-600"
-                  >
+                  <button onClick={() => api.forceShowdown()} className="btn btn-ghost px-3 py-1 text-xs">
                     {state.game.awaitingDiscard ? 'Force discard' : 'Reveal now'}
                   </button>
                 )}
@@ -401,7 +340,9 @@ export default function GameRoom() {
             )}
             <ShowHandControls state={state} />
             <ActionBar state={state} onAct={(a) => api.act(a)} />
-            <ReactionBar />
+            <div className="flex justify-center pt-1">
+              <ReactionBar />
+            </div>
           </div>
         </main>
         {state.youAreHost && <HostPanel state={state} />}
