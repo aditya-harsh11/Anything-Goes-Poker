@@ -54,6 +54,8 @@ export interface ClientToServerEvents {
   hostForceShowdown: () => void;
   /** Choose the variant for the next hand (only allowed between hands). */
   hostSetVariant: (variant: Variant) => void;
+  /** Randomize seat assignments before the first hand. */
+  hostShuffleSeats: () => void;
 }
 
 export interface ServerToClientEvents {

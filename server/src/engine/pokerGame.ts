@@ -22,6 +22,9 @@ import {
 import { buildPots, type Contribution } from './sidePots';
 import { evaluateBlackjack, blackjackWinners, type BlackjackHand } from './blackjack';
 
+/** Fixed ante posted by every player in a bomb pot. */
+const BOMB_ANTE = 50;
+
 /** Structural view of a player the engine reads/mutates (ServerPlayer satisfies this). */
 export interface HandPlayer {
   id: string;
@@ -34,6 +37,7 @@ export interface HandPlayer {
   inHand: boolean;
   holeCards: Card[];
   lastAction?: string;
+  handName?: string;
 }
 
 export interface ActionResult {
@@ -98,6 +102,7 @@ export class PokerGame {
       p.inHand = true;
       p.holeCards = [];
       p.lastAction = undefined;
+      p.handName = undefined;
     }
 
     if (this.variant.bombPot) {
@@ -116,7 +121,7 @@ export class PokerGame {
 
   /** Bomb pots: everyone antes straight into the pot (no blinds, no preflop). */
   private postAntes(): void {
-    const ante = this.bb;
+    const ante = BOMB_ANTE;
     for (const p of this.seats) {
       const pay = Math.min(ante, p.stack);
       p.stack -= pay;
@@ -548,8 +553,11 @@ export class PokerGame {
     const solvedA = new Map<string, SolvedHand>();
     const solvedB = new Map<string, SolvedHand>();
     for (const p of contenders) {
-      solvedA.set(p.id, { id: p.id, hand: bestSelection(p.holeCards, this.board, counts).hand });
-      solvedB.set(p.id, { id: p.id, hand: bestSelection(p.holeCards, this.board2, counts).hand });
+      const a = bestSelection(p.holeCards, this.board, counts).hand;
+      const b = bestSelection(p.holeCards, this.board2, counts).hand;
+      solvedA.set(p.id, { id: p.id, hand: a });
+      solvedB.set(p.id, { id: p.id, hand: b });
+      p.handName = `${describe(a)} (A) · ${describe(b)} (B)`;
     }
 
     const contribs: Contribution[] = this.seats.map((p) => ({
@@ -700,6 +708,10 @@ export class PokerGame {
 
   /** Build side pots, award to the best eligible solved hands, and finish the hand. */
   private awardFromSolved(solved: Map<string, SolvedHand>): void {
+    for (const [id, s] of solved) {
+      const p = this.seats.find((x) => x.id === id);
+      if (p) p.handName = describe(s.hand);
+    }
     const contribs: Contribution[] = this.seats.map((p) => ({
       id: p.id,
       amount: p.totalCommitted,
@@ -751,8 +763,11 @@ export class PokerGame {
     for (const p of contenders) {
       const sel = this.selections.get(p.id) ?? bestSelection(p.holeCards, this.board, [2]).indices;
       const bjCards = p.holeCards.filter((_, i) => !sel.includes(i));
-      pokerSolved.set(p.id, { id: p.id, hand: handFromSelection(p.holeCards, sel, this.board) });
-      bjByPlayer.set(p.id, evaluateBlackjack(bjCards));
+      const pokerHand = handFromSelection(p.holeCards, sel, this.board);
+      const bj = evaluateBlackjack(bjCards);
+      pokerSolved.set(p.id, { id: p.id, hand: pokerHand });
+      bjByPlayer.set(p.id, bj);
+      p.handName = `${describe(pokerHand)} · BJ ${bj.total}${bj.isNatural ? ' (blackjack!)' : ''}`;
     }
 
     const contribs: Contribution[] = this.seats.map((p) => ({

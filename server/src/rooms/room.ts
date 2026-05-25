@@ -29,6 +29,8 @@ export interface ServerPlayer {
   holeCards: Card[];
   /** Hole-card indices this player has voluntarily shown after a hand. */
   shownCards: number[];
+  /** Evaluated hand name at showdown (e.g. "Two Pair"). */
+  handName?: string;
   lastAction?: string;
   socketId: string | null;
   totalBoughtIn: number;
@@ -180,6 +182,21 @@ export class Room {
     p.stack = v;
   }
 
+  /** Randomly reassign seats — only allowed before the very first hand. */
+  shuffleSeats(): boolean {
+    if (this.handNumber !== 0 || (this.game && !this.game.isComplete())) return false;
+    const players = [...this.players.values()];
+    const seats = Array.from({ length: this.settings.maxSeats }, (_, i) => i);
+    for (let i = seats.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [seats[i], seats[j]] = [seats[j], seats[i]];
+    }
+    players.forEach((p, idx) => {
+      p.seat = seats[idx];
+    });
+    return true;
+  }
+
   /** Set the variant for the next hand (only allowed between hands). */
   setVariant(variant: string): boolean {
     if (!(variant in VARIANTS)) return false;
@@ -228,6 +245,7 @@ export class Room {
     for (const p of this.players.values()) {
       p.holeCards = [];
       p.shownCards = [];
+      p.handName = undefined;
     }
     this.game = new PokerGame(
       participants,
@@ -285,6 +303,7 @@ export class Room {
       if (folded) {
         p.holeCards = [];
         p.shownCards = [];
+        p.handName = undefined;
       }
       if (p.status !== 'sittingout') p.status = 'seated';
     }
@@ -378,6 +397,10 @@ export class Room {
       cardBacks,
       shown: p.shownCards,
       hasSelected: this.game?.awaitingSelection ? this.game.hasSelected(p.id) : undefined,
+      handName:
+        p.id === viewerId || (p.holeCards.length > 0 && p.shownCards.length >= p.holeCards.length)
+          ? p.handName
+          : undefined,
     };
   }
 

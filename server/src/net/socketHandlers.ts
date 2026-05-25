@@ -275,6 +275,12 @@ export function registerHandlers(io: IO): void {
       if (room.setVariant(String(variant))) broadcast(io, room);
     });
 
+    socket.on('hostShuffleSeats', () => {
+      const room = currentRoom();
+      if (!room || !requireHost(room)) return;
+      if (room.shuffleSeats()) broadcast(io, room);
+    });
+
     socket.on('disconnect', () => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;

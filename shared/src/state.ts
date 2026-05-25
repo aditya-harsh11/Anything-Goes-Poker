@@ -54,6 +54,8 @@ export interface PublicPlayer {
   shown: number[];
   /** During a manual-select showdown, whether this player has locked in their selection. */
   hasSelected?: boolean;
+  /** Evaluated hand name (e.g. "Two Pair") — shown to others only when fully revealed. */
+  handName?: string;
 }
 
 export interface PotInfo {

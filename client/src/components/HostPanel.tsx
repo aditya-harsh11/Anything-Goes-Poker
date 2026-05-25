@@ -37,6 +37,15 @@ export default function HostPanel({ state }: Props) {
           ))}
         </select>
         <p className="mb-2 text-xs text-slate-500">{VARIANTS[settings.variant].description}</p>
+        {game.handNumber === 0 && (
+          <button
+            onClick={() => api.shuffleSeats()}
+            disabled={players.length < 2}
+            className="mb-2 w-full rounded-lg bg-slate-700 py-2 text-sm font-semibold hover:bg-slate-600 disabled:opacity-40"
+          >
+            🔀 Shuffle seats
+          </button>
+        )}
         <button
           onClick={() => api.startHand()}
           disabled={handInProgress || eligible < 2}

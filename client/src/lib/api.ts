@@ -37,4 +37,5 @@ export const api = {
   setStack: (playerId: string, value: number) => socket.emit('hostSetStack', { playerId, value }),
   removePlayer: (playerId: string) => socket.emit('hostRemovePlayer', playerId),
   setVariant: (variant: Variant) => socket.emit('hostSetVariant', variant),
+  shuffleSeats: () => socket.emit('hostShuffleSeats'),
 };

@@ -152,7 +152,14 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
   },
 };
 
-export const VARIANT_LIST: VariantConfig[] = Object.values(VARIANTS);
+// Texas first, Omaha (PLO) second, then the rest alphabetical by name.
+export const VARIANT_LIST: VariantConfig[] = [
+  VARIANTS.texas,
+  VARIANTS.plo,
+  ...Object.values(VARIANTS)
+    .filter((v) => v.id !== 'texas' && v.id !== 'plo')
+    .sort((a, b) => a.name.localeCompare(b.name)),
+];
 
 /** Human-readable hint describing how many cards must be selected. */
 export function selectionHint(counts: number[]): string {
