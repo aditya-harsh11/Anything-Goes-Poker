@@ -29,9 +29,27 @@ const io = new Server<
   SocketData
 >(httpServer, {
   cors: { origin: '*' },
+  // Detect a dead socket reasonably fast (so the client shows "Reconnecting…" and
+  // recovers) without being so twitchy that brief mobile lag drops players.
+  pingInterval: 20_000,
+  pingTimeout: 20_000,
+  // Seamlessly restore a socket (its rooms + missed events) after a brief drop,
+  // so a momentary "reconnecting…" doesn't drop a player out of the hand.
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: true,
+  },
 });
 
 registerHandlers(io);
+
+// A single bad event must never take the whole server (every active table) down.
+process.on('uncaughtException', (err) => {
+  console.error('[poker] uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[poker] unhandledRejection:', reason);
+});
 
 const PORT = Number(process.env.PORT) || 3001;
 httpServer.listen(PORT, () => {

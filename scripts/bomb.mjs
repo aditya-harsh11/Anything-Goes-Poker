@@ -8,6 +8,7 @@ const log = (...a) => console.log(...a);
 const connect = () => io(URL, { transports: ['websocket'], forceNew: true });
 
 const approved = new Set();
+const selected = new Set();
 let started = false;
 let finished = false;
 let sawTwoBoards = false;
@@ -32,6 +33,14 @@ function driver(sock, getId, label) {
     }
 
     if (st.game.communityCards2 && st.game.communityCards2.length > 0) sawTwoBoards = true;
+
+    // Bomb Omaha: choose 2 hole cards for each board when prompted.
+    if (st.youMustSelect && !selected.has(label)) {
+      selected.add(label);
+      const me = st.players.find((p) => p.id === myId);
+      const idx = (me?.holeCards ?? []).map((_, i) => i).slice(0, 2);
+      setTimeout(() => sock.emit('selectBombCards', { a: idx, b: [idx[1], idx[0]] }), 15);
+    }
 
     if (st.game.toAct === myId && st.availableActions) {
       const av = st.availableActions;

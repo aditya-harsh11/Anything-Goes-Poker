@@ -18,6 +18,7 @@ import {
   handFromSelection,
   bestSelection,
   type SolvedHand,
+  type PokerHand,
 } from './handEvaluator';
 import { buildPots, type Contribution } from './sidePots';
 import { evaluateBlackjack, blackjackWinners, type BlackjackHand } from './blackjack';
@@ -74,10 +75,14 @@ export class PokerGame {
   private currentBet = 0;
   private minRaise: number;
   private lastFullRaiseBet = 0;
+  /** Last player to bet/raise on the current street — shows first at showdown. */
+  private lastAggressorId: string | null = null;
   private toActIndex: number | null = null;
   private actedThisStreet = new Set<string>();
   private lastActedBet = new Map<string, number>();
   private selections = new Map<string, number[]>();
+  /** Bomb pots: a second selection (Board B). `selections` holds Board A. */
+  private selectionsB = new Map<string, number[]>();
   private discardTarget = 0;
   private complete = false;
 
@@ -219,7 +224,9 @@ export class PokerGame {
   // ---- public queries -----------------------------------------------------
 
   get currentActorId(): string | null {
-    if (this.complete || this.toActIndex === null) return null;
+    if (this.complete || this.awaitingDiscard || this.awaitingSelection || this.toActIndex === null) {
+      return null;
+    }
     return this.seats[this.toActIndex].id;
   }
 
@@ -232,12 +239,57 @@ export class PokerGame {
     return !!p && p.status !== 'folded';
   }
 
-  /** At showdown, all-in players can't muck — force their cards face-up. */
-  private forceShowAllIns(): void {
-    for (const p of this.seats) {
-      if (p.status === 'allin' && p.holeCards.length > 0) {
+  /**
+   * Reveal contenders in standard showdown order. The last aggressor on the final
+   * street shows first (or, if the street was checked down, the first live player left
+   * of the button); then it proceeds clockwise. Each later player only turns their
+   * hand up if it matches or beats the best hand shown so far — otherwise they muck
+   * (stay hidden). All-in players can't muck, so they are always shown.
+   */
+  private applyShowdownReveals(solved: Map<string, SolvedHand>): void {
+    let best: PokerHand | null = null;
+    for (const p of this.revealOrder()) {
+      const s = solved.get(p.id);
+      if (!s) continue;
+      const mustShow = best === null || p.status === 'allin' || compareHands(s.hand, best) >= 0;
+      if (mustShow) {
         p.shownCards = p.holeCards.map((_, i) => i);
+        if (best === null || compareHands(s.hand, best) > 0) best = s.hand;
       }
+    }
+  }
+
+  /** Showdown reveal order: last aggressor (or first left of button) first, then clockwise. */
+  private revealOrder(): HandPlayer[] {
+    const n = this.seats.length;
+    const isContender = (p: HandPlayer) => p.status !== 'folded';
+    let startIdx = -1;
+    if (this.lastAggressorId) {
+      const ai = this.seats.findIndex((s) => s.id === this.lastAggressorId);
+      if (ai >= 0 && isContender(this.seats[ai])) startIdx = ai;
+    }
+    if (startIdx < 0) {
+      for (let k = 1; k <= n; k++) {
+        const idx = (this.buttonIndex + k) % n;
+        if (isContender(this.seats[idx])) {
+          startIdx = idx;
+          break;
+        }
+      }
+    }
+    if (startIdx < 0) return [];
+    const order: HandPlayer[] = [];
+    for (let k = 0; k < n; k++) {
+      const p = this.seats[(startIdx + k) % n];
+      if (isContender(p)) order.push(p);
+    }
+    return order;
+  }
+
+  /** Split-pot variants (bomb/blackjack): turn every contender's hand face-up. */
+  private revealAllContenders(): void {
+    for (const p of this.contenders()) {
+      if (p.holeCards.length > 0) p.shownCards = p.holeCards.map((_, i) => i);
     }
   }
 
@@ -250,7 +302,10 @@ export class PokerGame {
   }
 
   availableActionsFor(playerId: string): AvailableActions | null {
-    if (this.complete || this.toActIndex === null) return null;
+    // No one is "to act" while the hand is paused for discards or card selection.
+    if (this.complete || this.awaitingDiscard || this.awaitingSelection || this.toActIndex === null) {
+      return null;
+    }
     const p = this.seats[this.toActIndex];
     if (p.id !== playerId) return null;
 
@@ -316,7 +371,9 @@ export class PokerGame {
   // ---- actions ------------------------------------------------------------
 
   applyAction(playerId: string, action: PlayerAction): ActionResult {
-    if (this.complete || this.toActIndex === null) return { ok: false, error: 'no action expected' };
+    if (this.complete || this.awaitingDiscard || this.awaitingSelection || this.toActIndex === null) {
+      return { ok: false, error: 'no action expected' };
+    }
     const p = this.seats[this.toActIndex];
     if (p.id !== playerId) return { ok: false, error: 'not your turn' };
 
@@ -365,6 +422,7 @@ export class PokerGame {
           this.lastFullRaiseBet = to;
         }
         if (p.stack === 0) p.status = 'allin';
+        this.lastAggressorId = p.id;
         const verb = action.type === 'bet' ? 'Bet' : 'Raise to';
         p.lastAction = p.status === 'allin' ? `${verb} ${to} (all-in)` : `${verb} ${to}`;
         break;
@@ -525,6 +583,7 @@ export class PokerGame {
     this.currentBet = 0;
     this.minRaise = this.bb;
     this.lastFullRaiseBet = 0;
+    this.lastAggressorId = null;
     this.actedThisStreet.clear();
     this.lastActedBet.clear();
     for (const p of this.seats) {
@@ -555,6 +614,12 @@ export class PokerGame {
     this.toActIndex = null;
     const contenders = this.contenders();
     if (this.variant.bombPot) {
+      // Two boards: if players must pick which hole cards to use (Bomb Omaha), pause
+      // so each contender can choose 2 for Board A and 2 for Board B.
+      if (this.bombNeedsSelection() && contenders.length > 1) {
+        this.awaitingSelection = true;
+        return;
+      }
       this.resolveBombShowdown(contenders);
       return;
     }
@@ -566,14 +631,23 @@ export class PokerGame {
     this.resolveAutoShowdown(contenders);
   }
 
-  /** Bomb pot: split each pot in half between the best hand on each of the two boards. */
+  /** Bomb pot where players must choose hole cards (more dealt than they may use). */
+  private bombNeedsSelection(): boolean {
+    return this.variant.holeCards > Math.max(...this.variant.allowedHoleCounts);
+  }
+
+  /** Bomb pot: split each pot in half between the best hand on each of the two boards.
+   *  When players chose their hole cards per board, use those picks; otherwise the best. */
   private resolveBombShowdown(contenders: HandPlayer[]): void {
+    this.awaitingSelection = false;
     const counts = this.variant.allowedHoleCounts;
     const solvedA = new Map<string, SolvedHand>();
     const solvedB = new Map<string, SolvedHand>();
     for (const p of contenders) {
-      const a = bestSelection(p.holeCards, this.board, counts).hand;
-      const b = bestSelection(p.holeCards, this.board2, counts).hand;
+      const selA = this.selections.get(p.id) ?? bestSelection(p.holeCards, this.board, counts).indices;
+      const selB = this.selectionsB.get(p.id) ?? bestSelection(p.holeCards, this.board2, counts).indices;
+      const a = handFromSelection(p.holeCards, selA, this.board);
+      const b = handFromSelection(p.holeCards, selB, this.board2);
       solvedA.set(p.id, { id: p.id, hand: a });
       solvedB.set(p.id, { id: p.id, hand: b });
       p.handName = `${describe(a)} (A) · ${describe(b)} (B)`;
@@ -605,15 +679,31 @@ export class PokerGame {
     apply(winsB);
 
     const nameOf = (id: string) => this.seats.find((s) => s.id === id)?.name ?? '';
+    const handFor = (m: Map<string, SolvedHand>, id: string) => {
+      const s = m.get(id);
+      return s ? describe(s.hand) : undefined;
+    };
     const winners: HandResult['winners'] = [
-      ...[...winsA.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, board: 'A' as const })),
-      ...[...winsB.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, board: 'B' as const })),
+      ...[...winsA.entries()].map(([id, amount]) => ({
+        playerId: id,
+        name: nameOf(id),
+        amount,
+        board: 'A' as const,
+        handName: handFor(solvedA, id),
+      })),
+      ...[...winsB.entries()].map(([id, amount]) => ({
+        playerId: id,
+        name: nameOf(id),
+        amount,
+        board: 'B' as const,
+        handName: handFor(solvedB, id),
+      })),
     ];
 
     this.phase = 'showdown';
     this.toActIndex = null;
     this.complete = true;
-    this.forceShowAllIns();
+    this.revealAllContenders();
     this.lastResult = {
       handNumber: this.handNumber,
       board: this.board,
@@ -657,9 +747,10 @@ export class PokerGame {
     this.awardFromSolved(solved);
   }
 
-  /** A player locks in which hole cards to use (manual-select variants). */
+  /** A player locks in which hole cards to use (single-board manual-select variants). */
   submitSelection(playerId: string, indices: number[]): ActionResult {
     if (!this.awaitingSelection) return { ok: false, error: 'no selection expected' };
+    if (this.variant.bombPot) return { ok: false, error: 'pick cards for each board instead' };
     const p = this.seats.find((s) => s.id === playerId);
     if (!p || p.status === 'folded') return { ok: false, error: 'not in the hand' };
     if (this.selections.has(playerId)) return { ok: false, error: 'already selected' };
@@ -676,6 +767,34 @@ export class PokerGame {
     return { ok: true };
   }
 
+  /** Bomb Omaha: a player locks in which 2 hole cards to use on each of the two boards. */
+  submitBombSelection(playerId: string, a: number[], b: number[]): ActionResult {
+    if (!this.awaitingSelection || !this.variant.bombPot) return { ok: false, error: 'no selection expected' };
+    const p = this.seats.find((s) => s.id === playerId);
+    if (!p || p.status === 'folded') return { ok: false, error: 'not in the hand' };
+    if (this.selections.has(playerId)) return { ok: false, error: 'already selected' };
+
+    const clean = (idx: number[]) =>
+      [...new Set(idx)]
+        .filter((i) => Number.isInteger(i) && i >= 0 && i < p.holeCards.length)
+        .sort((x, y) => x - y);
+    const selA = clean(a);
+    const selB = clean(b);
+    if (
+      !this.variant.allowedHoleCounts.includes(selA.length) ||
+      !this.variant.allowedHoleCounts.includes(selB.length)
+    ) {
+      return { ok: false, error: 'pick the required number of cards for each board' };
+    }
+
+    this.selections.set(playerId, selA);
+    this.selectionsB.set(playerId, selB);
+    if (this.contenders().every((c) => this.selections.has(c.id))) {
+      this.resolveBombShowdown(this.contenders());
+    }
+    return { ok: true };
+  }
+
   /** Host can force progress if someone is slow/disconnected (auto-picks for them). */
   forceResolve(): void {
     if (this.awaitingDiscard) {
@@ -687,9 +806,23 @@ export class PokerGame {
       return;
     }
     if (!this.awaitingSelection) return;
+    const counts = this.variant.allowedHoleCounts;
+    if (this.variant.bombPot) {
+      // Auto-pick the best legal cards per board for anyone who hasn't chosen.
+      for (const p of this.contenders()) {
+        if (!this.selections.has(p.id)) {
+          this.selections.set(p.id, bestSelection(p.holeCards, this.board, counts).indices);
+        }
+        if (!this.selectionsB.has(p.id)) {
+          this.selectionsB.set(p.id, bestSelection(p.holeCards, this.board2, counts).indices);
+        }
+      }
+      this.resolveBombShowdown(this.contenders());
+      return;
+    }
     for (const p of this.contenders()) {
       if (!this.selections.has(p.id)) {
-        this.selections.set(p.id, bestSelection(p.holeCards, this.board, this.variant.allowedHoleCounts).indices);
+        this.selections.set(p.id, bestSelection(p.holeCards, this.board, counts).indices);
       }
     }
     this.resolveSelectedShowdown();
@@ -780,13 +913,14 @@ export class PokerGame {
 
     const winners = [...winningsById.entries()].map(([id, amount]) => {
       const p = this.seats.find((s) => s.id === id)!;
-      return { playerId: id, name: p.name, amount };
+      const s = solved.get(id);
+      return { playerId: id, name: p.name, amount, handName: s ? describe(s.hand) : undefined };
     });
 
     this.phase = 'showdown';
     this.toActIndex = null;
     this.complete = true;
-    this.forceShowAllIns();
+    this.applyShowdownReveals(solved);
     this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
   }
 
@@ -831,15 +965,35 @@ export class PokerGame {
     apply(winsBj);
 
     const nameOf = (id: string) => this.seats.find((s) => s.id === id)?.name ?? '';
+    const pokerHandFor = (id: string) => {
+      const s = pokerSolved.get(id);
+      return s ? describe(s.hand) : undefined;
+    };
+    const bjHandFor = (id: string) => {
+      const bj = bjByPlayer.get(id);
+      return bj ? `${bj.total}${bj.isNatural ? ' (BJ)' : ''}` : undefined;
+    };
     const winners: HandResult['winners'] = [
-      ...[...winsPoker.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, label: 'Poker' })),
-      ...[...winsBj.entries()].map(([id, amount]) => ({ playerId: id, name: nameOf(id), amount, label: 'Blackjack' })),
+      ...[...winsPoker.entries()].map(([id, amount]) => ({
+        playerId: id,
+        name: nameOf(id),
+        amount,
+        label: 'Poker',
+        handName: pokerHandFor(id),
+      })),
+      ...[...winsBj.entries()].map(([id, amount]) => ({
+        playerId: id,
+        name: nameOf(id),
+        amount,
+        label: 'Blackjack',
+        handName: bjHandFor(id),
+      })),
     ];
 
     this.phase = 'showdown';
     this.toActIndex = null;
     this.complete = true;
-    this.forceShowAllIns();
+    this.revealAllContenders();
     this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
   }
 

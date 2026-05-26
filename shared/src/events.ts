@@ -34,12 +34,12 @@ export interface ClientToServerEvents {
   playerAction: (action: PlayerAction) => void;
   /** At a manual-select showdown, lock in which hole cards to use (by index). */
   selectCards: (indices: number[]) => void;
+  /** Bomb Omaha: lock in which hole cards to use on each board (`a` = Board A, `b` = Board B). */
+  selectBombCards: (data: { a: number[]; b: number[] }) => void;
   /** Crazy Pineapple: discard one hole card (by index) after the flop. */
   discardCard: (index: number) => void;
   /** After a hand, voluntarily reveal hole cards by index (e.g. [0,1] for both). */
   showCards: (indices: number[]) => void;
-  /** Throw an emoji reaction onto the table. */
-  sendReaction: (emoji: string) => void;
   sitOut: () => void;
   sitIn: () => void;
   leaveRoom: () => void;
@@ -62,7 +62,5 @@ export interface ServerToClientEvents {
   roomState: (state: RoomState) => void;
   /** Private hole cards for the recipient (also embedded in RoomState, sent for convenience). */
   yourCards: (cards: Card[]) => void;
-  /** An emoji reaction thrown by a player, to float over their seat. */
-  reaction: (data: { id: string; fromId: string; fromName: string; emoji: string }) => void;
   errorMsg: (message: string) => void;
 }

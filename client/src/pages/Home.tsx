@@ -49,7 +49,7 @@ export default function Home() {
           <span className="text-crimson">♦</span>
           <span>♣</span>
         </div>
-        <h1 className="font-display text-5xl font-semibold leading-none text-ink">The Card Room</h1>
+        <h1 className="font-display text-5xl font-semibold leading-none text-ink">Anything Goes Poker</h1>
         <p className="mt-3 text-sm text-ink-dim">
           A private table for your home game. Play-chips only — settle up like gentlemen.
         </p>
@@ -65,7 +65,7 @@ export default function Home() {
           <label className={label}>Your name</label>
           <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Host" />
         </div>
-        <p className="text-xs text-ink-dim">You'll choose the variant for each hand at the table.</p>
+        <p className="text-xs text-ink-dim">The dealer picks the game for each hand at the table.</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Small blind</label>

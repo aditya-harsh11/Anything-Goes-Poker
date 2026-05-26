@@ -1,18 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Card, RoomState, PublicPlayer } from '@poker/shared';
-import type { FloatingReaction } from '../lib/useRoom';
 import PlayingCard from './PlayingCard';
 
 interface Props {
   state: RoomState;
-  reactions: FloatingReaction[];
 }
 
 const DESIGN_W = 1150;
 const DESIGN_H = 767;
-// Cap the rendered table width so the host (who has a side panel) and non-hosts
-// (full width) see the same size instead of the table ballooning without a panel.
-const MAX_TABLE_W = 960;
+// Cap scale to keep cards crisp; the table fits its slot otherwise.
+const MAX_SCALE = 1.25;
 
 function statusBadge(p: PublicPlayer): { label: string; cls: string } | null {
   if (p.status === 'folded') return { label: 'Folded', cls: 'bg-black/50 text-ink-dim' };
@@ -31,6 +28,7 @@ function Seat({
   player,
   isYou,
   isToAct,
+  isWinner,
   isLeader,
   isSmallBlind,
   isBigBlind,
@@ -40,6 +38,7 @@ function Seat({
   player: PublicPlayer;
   isYou: boolean;
   isToAct: boolean;
+  isWinner: boolean;
   isLeader: boolean;
   isSmallBlind: boolean;
   isBigBlind: boolean;
@@ -55,12 +54,14 @@ function Seat({
   const hasCards = faceCards.length > 0;
   const sel = isYou ? selection : undefined;
   const hasSel = !!sel && sel.length > 0;
+  // Winner glow trumps to-act ring (the hand is over by then anyway).
+  const glowClass = isWinner ? 'winner-glow' : isToAct ? 'active-glow' : '';
 
   return (
     <div
       className={`panel flex flex-col items-center gap-0.5 rounded-2xl px-2.5 pb-2 pt-1.5 ${
         isYou ? 'min-w-36' : 'w-36'
-      } ${isToAct ? 'active-glow' : ''} ${dimmed ? 'opacity-55' : ''}`}
+      } ${glowClass} ${dimmed && !isWinner ? 'opacity-55' : ''}`}
     >
       {hasCards && (
         <div className="flex min-h-11 items-center justify-center gap-0.5">
@@ -120,7 +121,7 @@ function Seat({
   );
 }
 
-export default function Table({ state, reactions }: Props) {
+export default function Table({ state }: Props) {
   const { players, game, settings, youId } = state;
   const choosing = !!(state.youMustSelect || state.youMustDiscard);
 
@@ -129,7 +130,14 @@ export default function Table({ state, reactions }: Props) {
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const update = () => setScale(Math.min(el.clientWidth, MAX_TABLE_W) / DESIGN_W);
+    // Fit to whichever axis is tighter so the table fills its slot in the
+    // strict-100vh layout without overflow.
+    const update = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      setScale(Math.min(w / DESIGN_W, h / DESIGN_H, MAX_SCALE));
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -145,6 +153,12 @@ export default function Table({ state, reactions }: Props) {
   const maxStack = Math.max(0, ...players.map((p) => p.stack));
   const allEqual = players.every((p) => p.stack === maxStack);
 
+  // Winners (during showdown) get a pulsing glow on their seat tile.
+  const winnerIds = useMemo(() => {
+    if (game.phase !== 'showdown' || !state.lastResult) return new Set<string>();
+    return new Set(state.lastResult.winners.map((w) => w.playerId));
+  }, [game.phase, state.lastResult]);
+
   const seats = [];
   for (let seat = 0; seat < n; seat++) {
     const { x, y } = seatPosition(seat, mySeat, n);
@@ -156,6 +170,7 @@ export default function Table({ state, reactions }: Props) {
             player={player}
             isYou={player.id === youId}
             isToAct={game.toAct === player.id}
+            isWinner={winnerIds.has(player.id)}
             isLeader={!allEqual && player.stack === maxStack && maxStack > 0}
             isSmallBlind={game.smallBlindSeat === player.seat}
             isBigBlind={game.bigBlindSeat === player.seat}
@@ -179,14 +194,14 @@ export default function Table({ state, reactions }: Props) {
   }
 
   return (
-    <div ref={wrapRef} className="relative w-full overflow-hidden" style={{ height: DESIGN_H * scale }}>
+    <div ref={wrapRef} className="relative w-full flex-1 min-h-0 overflow-hidden">
       <div
-        className="absolute left-1/2 top-0"
+        className="absolute left-1/2 top-1/2"
         style={{
           width: DESIGN_W,
           height: DESIGN_H,
-          transform: `translateX(-50%) scale(${scale})`,
-          transformOrigin: 'top center',
+          transform: `translate(-50%, -50%) scale(${scale})`,
+          transformOrigin: 'center center',
         }}
       >
         <div className="felt absolute inset-[7%] rounded-[48%]" />
@@ -220,20 +235,6 @@ export default function Table({ state, reactions }: Props) {
         </div>
 
         {seats}
-
-        {reactions.map((r) => {
-          const p = players.find((pl) => pl.id === r.fromId);
-          const pos = p ? seatPosition(p.seat, mySeat, n) : { x: 50, y: 60 };
-          return (
-            <div
-              key={r.id}
-              className="reaction-float pointer-events-none absolute z-30 text-5xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
-              style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-            >
-              {r.emoji}
-            </div>
-          );
-        })}
       </div>
     </div>
   );

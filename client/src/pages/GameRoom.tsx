@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SUIT_SYMBOL, VARIANTS, REACTIONS, selectionHint, type RoomState } from '@poker/shared';
+import { SUIT_SYMBOL, VARIANTS, selectionHint, type Card, type RoomState } from '@poker/shared';
 import { socket } from '../lib/socket';
 import { useRoom } from '../lib/useRoom';
 import { joinRoom, rejoin, api } from '../lib/api';
@@ -9,6 +9,7 @@ import Table from '../components/Table';
 import ActionBar from '../components/ActionBar';
 import HostPanel from '../components/HostPanel';
 import PlayingCard from '../components/PlayingCard';
+import VariantPicker from '../components/VariantPicker';
 
 function ResultBanner({ state }: { state: RoomState }) {
   const r = state.lastResult;
@@ -18,14 +19,183 @@ function ResultBanner({ state }: { state: RoomState }) {
       {r.winners.length === 0 ? (
         <span className="text-ink-dim">Hand complete</span>
       ) : (
-        r.winners.map((w, i) => (
-          <span key={`${w.playerId}-${w.board ?? w.label ?? ''}-${i}`} className="mr-3 font-semibold text-brass-bright">
-            {w.name} wins {w.amount.toLocaleString()}
-            {w.label ? ` (${w.label})` : w.board ? ` (Board ${w.board})` : ''}
-          </span>
-        ))
+        r.winners.map((w, i) => {
+          // Render as: "Name wins 360, Two Pair (Board A)" — bracket label clarifies
+          // which pot they won (bomb board / poker-vs-blackjack split) when relevant.
+          const bracket = w.label ?? (w.board ? `Board ${w.board}` : null);
+          return (
+            <span
+              key={`${w.playerId}-${w.board ?? w.label ?? ''}-${i}`}
+              className="mr-3 font-semibold text-brass-bright"
+            >
+              {w.name} wins {w.amount.toLocaleString()}
+              {w.handName && (
+                <>
+                  ,{' '}
+                  <span className="font-normal text-ink">{w.handName}</span>
+                </>
+              )}
+              {bracket && <span className="ml-1 font-normal text-ink-dim">({bracket})</span>}
+            </span>
+          );
+        })
       )}
     </div>
+  );
+}
+
+/**
+ * Bottom-strip status line for between-hand states. Three distinct messages:
+ *   - awaitingDealerPick + you're the dealer: prompt to pick (modal also opens)
+ *   - awaitingDealerPick + you're not the dealer: "Waiting for [Name] to pick…"
+ *   - idle (showdown / waiting before host starts): explain who'll do what
+ */
+function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: () => void }) {
+  const handInProgress = state.game.phase !== 'waiting' && state.game.phase !== 'showdown';
+  if (handInProgress || state.game.awaitingSelection || state.game.awaitingDiscard) return null;
+
+  const dealer = state.players.find((p) => p.id === state.nextDealerId);
+  const host = state.players.find((p) => p.id === state.hostId);
+
+  // Each status pill is w-fit so it floats on the table background instead of
+  // stretching across the full screen width.
+  const pill =
+    'flex w-fit items-center justify-center gap-2 rounded-full bg-black/45 px-3 py-1 text-center text-xs ring-1 ring-brass/20 backdrop-blur-sm';
+
+  if (state.awaitingDealerPick) {
+    if (state.youAreDealer) {
+      return (
+        <div className={pill}>
+          <span className="text-brass-bright">It's your deal — pick the game to deal the hand.</span>
+          <button onClick={onOpenPicker} className="btn btn-gold px-3 py-1 text-xs">
+            Pick the game
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className={`${pill} text-ink-dim`}>
+        Waiting for{' '}
+        <span className="font-semibold text-brass-bright">{dealer?.name ?? 'the dealer'}</span> to pick the game…
+      </div>
+    );
+  }
+
+  // Idle: nothing for the host (their HostPanel has the Start button), and a hint for
+  // everyone else explaining who'll be on the clock once the host kicks things off.
+  if (state.youAreHost) return null;
+  return (
+    <div className={`${pill} text-ink-dim`}>
+      {dealer ? (
+        <>
+          <span className="font-semibold text-brass-bright">{host?.name ?? 'host'}</span> starts the hand ·{' '}
+          <span className="font-semibold text-brass-bright">{dealer.name}</span> picks the game
+        </>
+      ) : (
+        'Waiting for enough players…'
+      )}
+    </div>
+  );
+}
+
+/**
+ * Bomb Omaha: pick 2 of your 4 hole cards for Board A — the other 2 automatically
+ * play Board B. Same visual idiom as Blackjack Hold'em: picked cards get a green
+ * "A" badge, the auto-assigned remainder get a sky "B" badge.
+ */
+function BombSelectTray({ state }: { state: RoomState }) {
+  const me = state.players.find((p) => p.id === state.youId);
+  const cards = me?.holeCards ?? [];
+  const variant = VARIANTS[state.settings.variant];
+  const need = Math.max(...variant.allowedHoleCounts);
+  const [selA, setSelA] = useState<number[]>([]);
+
+  if (cards.length === 0) return null;
+
+  const toggle = (i: number) =>
+    setSelA((cur) => {
+      if (cur.includes(i)) return cur.filter((x) => x !== i);
+      const next = [...cur, i];
+      return next.length > need ? next.slice(next.length - need) : next;
+    });
+
+  const canConfirm = selA.length === need;
+  const selB = cards.map((_, i) => i).filter((i) => !selA.includes(i));
+  const decided = selA.length === need;
+
+  return (
+    <div className="mx-auto flex w-fit flex-col items-center gap-3 rounded-2xl bg-black/45 px-4 py-3 ring-1 ring-brass/20 backdrop-blur-sm">
+      <div className="flex flex-wrap items-end justify-center gap-2">
+        {cards.map((card, i) => (
+          <PartitionCard
+            key={i}
+            card={card}
+            picked={selA.includes(i)}
+            decided={decided}
+            pickedBadge="A"
+            otherBadge="B"
+            onToggle={() => toggle(i)}
+          />
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+        <span className="text-ink-dim">
+          Pick {need} for <span className="text-emerald-300">Board A</span> · other {need} play{' '}
+          <span className="text-sky-300">Board B</span>
+        </span>
+        <button
+          disabled={!canConfirm}
+          onClick={() => api.selectBombCards(selA, selB)}
+          className="btn btn-emerald px-5 py-2"
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Card button for "pick N of your hand; the rest play a different role" pickers.
+ * Picked cards get a green ring + a badge for the picked role (e.g. "A", "P");
+ * once enough are picked, the remainder get a sky ring + the other-role badge
+ * (e.g. "B"). Used by Bomb Omaha and Blackjack Hold'em.
+ */
+function PartitionCard({
+  card,
+  picked,
+  decided,
+  pickedBadge,
+  otherBadge,
+  onToggle,
+}: {
+  card: Card;
+  picked: boolean;
+  decided: boolean;
+  pickedBadge: string;
+  otherBadge: string;
+  onToggle: () => void;
+}) {
+  const ring = picked
+    ? 'ring-4 ring-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.7)] -translate-y-2'
+    : decided
+      ? 'ring-2 ring-sky-300/70 opacity-90'
+      : 'opacity-70 hover:-translate-y-1 hover:opacity-100';
+  return (
+    <button onClick={onToggle} className={`relative rounded-lg transition ${ring}`}>
+      <PlayingCard card={card} size="sm" />
+      {picked && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 text-[10px] font-bold text-black">
+          {pickedBadge}
+        </span>
+      )}
+      {!picked && decided && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-sky-300 text-[10px] font-bold text-black">
+          {otherBadge}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -42,6 +212,8 @@ function ChooseTray({ state }: { state: RoomState }) {
   const [sel, setSel] = useState<number[]>([]);
 
   if (mode === 'none' || cards.length === 0) return null;
+  // Bomb pots that require choosing (Bomb Omaha) use a dedicated two-board chooser.
+  if (mode === 'select' && variant.bombPot) return <BombSelectTray state={state} />;
 
   const toggle = (i: number) => {
     if (mode === 'discard') setSel((cur) => (cur[0] === i ? [] : [i]));
@@ -54,12 +226,30 @@ function ChooseTray({ state }: { state: RoomState }) {
     : 'shadow-[0_0_18px_rgba(52,211,153,0.75)]';
   const canConfirm = isDiscard ? sel.length === 1 : variant.allowedHoleCounts.includes(sel.length);
   const confirm = () => (isDiscard ? api.discardCard(sel[0]) : api.selectCards(sel));
+  // Blackjack Hold'em is a partition pick: 2 cards become poker, the other 2 become
+  // blackjack. Render with P/B badges (same idiom as Bomb Omaha's A/B).
+  const isPartition = !isDiscard && variant.blackjack;
+  const partitionNeed = isPartition ? 2 : 0;
+  const partitionDecided = isPartition && sel.length === partitionNeed;
 
   return (
-    <div className="flex flex-col items-center gap-2 border-b border-brass/15 pb-3">
+    <div className="mx-auto flex w-fit flex-col items-center gap-2 rounded-2xl bg-black/45 px-4 py-3 ring-1 ring-brass/20 backdrop-blur-sm">
       <div className="flex flex-wrap items-end justify-center gap-2.5">
         {cards.map((card, i) => {
           const selected = sel.includes(i);
+          if (isPartition) {
+            return (
+              <PartitionCard
+                key={i}
+                card={card}
+                picked={selected}
+                decided={partitionDecided}
+                pickedBadge="P"
+                otherBadge="B"
+                onToggle={() => toggle(i)}
+              />
+            );
+          }
           return (
             <button
               key={i}
@@ -86,11 +276,16 @@ function ChooseTray({ state }: { state: RoomState }) {
       </div>
       <div className="flex items-center gap-3 text-sm">
         <span className="text-ink-dim">
-          {mode === 'discard'
-            ? `Pick a card to discard — ${sel.length}/1`
-            : variant.blackjack
-              ? 'Pick 2 cards for poker (other 2 = blackjack)'
-              : `Choose ${selectionHint(variant.allowedHoleCounts)}`}
+          {mode === 'discard' ? (
+            `Pick a card to discard — ${sel.length}/1`
+          ) : isPartition ? (
+            <>
+              Pick 2 for <span className="text-emerald-300">Poker</span> · other 2 play{' '}
+              <span className="text-sky-300">Blackjack</span>
+            </>
+          ) : (
+            `Choose ${selectionHint(variant.allowedHoleCounts)}`
+          )}
         </span>
         <button
           disabled={!canConfirm}
@@ -104,7 +299,7 @@ function ChooseTray({ state }: { state: RoomState }) {
   );
 }
 
-/** After a hand, let the player reveal their own cards. */
+/** After a hand, let the player reveal their own cards — even if they folded or lost. */
 function ShowHandControls({ state }: { state: RoomState }) {
   const me = state.players.find((p) => p.id === state.youId);
   const cards = me?.holeCards ?? [];
@@ -113,35 +308,34 @@ function ShowHandControls({ state }: { state: RoomState }) {
   const allShown = cards.every((_, i) => shown.includes(i));
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 py-1 text-sm">
-      <span className="text-ink-dim">Show:</span>
-      {cards.map((c, i) => (
-        <button key={i} disabled={shown.includes(i)} onClick={() => api.showCards([i])} className="btn btn-ghost px-3 py-1.5">
-          {shown.includes(i) ? 'Shown ' : ''}
-          {c.rank}
-          <span className={c.suit === 'h' || c.suit === 'd' ? 'text-crimson' : ''}>{SUIT_SYMBOL[c.suit]}</span>
-        </button>
-      ))}
-      <button disabled={allShown} onClick={() => api.showCards(cards.map((_, i) => i))} className="btn btn-gold px-3 py-1.5">
-        {cards.length === 2 ? 'Show both' : `Show all (${cards.length})`}
-      </button>
-    </div>
-  );
-}
-
-function ReactionBar() {
-  return (
-    <div className="flex items-center justify-center gap-1 rounded-full bg-black/35 px-3 py-1 ring-1 ring-brass/15">
-      {REACTIONS.map((e) => (
+    // w-fit pill so the controls hug their content and float on the background
+    // instead of stretching across the full screen width.
+    <div className="mx-auto flex w-fit flex-col items-center gap-1.5 rounded-2xl bg-black/45 px-4 py-2 ring-1 ring-brass/20 backdrop-blur-sm">
+      <span className="text-sm font-semibold text-brass-bright">
+        {allShown ? 'Your hand is shown' : 'Show your hand'}
+        {!allShown && <span className="ml-1 font-normal text-ink-dim">(optional)</span>}
+      </span>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {cards.map((c, i) => (
+          <button
+            key={i}
+            disabled={shown.includes(i)}
+            onClick={() => api.showCards([i])}
+            className="btn btn-ghost px-3 py-1.5"
+          >
+            {shown.includes(i) ? 'Shown ' : ''}
+            {c.rank}
+            <span className={c.suit === 'h' || c.suit === 'd' ? 'text-crimson' : ''}>{SUIT_SYMBOL[c.suit]}</span>
+          </button>
+        ))}
         <button
-          key={e}
-          onClick={() => api.sendReaction(e)}
-          className="rounded-full px-1.5 py-0.5 text-2xl transition hover:scale-125 hover:bg-white/5"
-          title="Throw a reaction"
+          disabled={allShown}
+          onClick={() => api.showCards(cards.map((_, i) => i))}
+          className="btn btn-gold px-4 py-1.5"
         >
-          {e}
+          {cards.length === 2 ? 'Show both' : `Show all (${cards.length})`}
         </button>
-      ))}
+      </div>
     </div>
   );
 }
@@ -150,9 +344,9 @@ function ShareBar({ roomId }: { roomId: string }) {
   const url = `${window.location.origin}/game/${roomId}`;
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-ink-dim">Invite</span>
-      <code className="max-w-[60vw] select-all truncate rounded-md bg-black/40 px-2 py-1 text-brass ring-1 ring-brass/15">
+    <div className="flex items-center gap-1.5 text-sm">
+      <span className="hidden shrink-0 text-xs text-ink-dim sm:inline">Invite</span>
+      <code className="hidden min-w-0 max-w-[18vw] select-all truncate rounded-md bg-black/40 px-2 py-1 text-xs text-brass ring-1 ring-brass/15 md:inline-block">
         {url}
       </code>
       <button
@@ -161,9 +355,10 @@ function ShareBar({ roomId }: { roomId: string }) {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         }}
-        className="btn btn-ghost px-2.5 py-1 text-xs"
+        className="btn btn-ghost px-2.5 py-1.5 text-xs sm:px-3"
+        title={url}
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? 'Copied!' : 'Copy invite'}
       </button>
     </div>
   );
@@ -213,34 +408,57 @@ export default function GameRoom() {
   const { roomId: rawId } = useParams();
   const roomId = (rawId ?? '').toLowerCase();
   const navigate = useNavigate();
-  const { state, error, connected, reactions } = useRoom();
+  const { state, error, connected } = useRoom();
 
   const [needJoin, setNeedJoin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
   const [showLedger, setShowLedger] = useState(false);
+  const [showVariants, setShowVariants] = useState(false);
+  const [tableGone, setTableGone] = useState(false);
+
+  const attemptRejoin = useCallback(() => {
+    const session = loadSession(roomId);
+    if (!session) {
+      setNeedJoin(true);
+      return;
+    }
+    rejoin(roomId, session.token).then((ack) => {
+      if (ack.ok) {
+        setNeedJoin(false);
+        setTableGone(false);
+      } else if (/room not found/i.test(ack.error ?? '')) {
+        // The table itself is gone (server restarted/slept) — don't leave a dead UI up.
+        setTableGone(true);
+      } else {
+        clearSession(roomId);
+        setNeedJoin(true);
+      }
+    });
+  }, [roomId]);
 
   useEffect(() => {
-    const attemptRejoin = () => {
-      const session = loadSession(roomId);
-      if (!session) {
-        setNeedJoin(true);
-        return;
-      }
-      rejoin(roomId, session.token).then((ack) => {
-        if (ack.ok) setNeedJoin(false);
-        else {
-          clearSession(roomId);
-          setNeedJoin(true);
-        }
-      });
-    };
     if (socket.connected) attemptRejoin();
     socket.on('connect', attemptRejoin);
     return () => {
       socket.off('connect', attemptRejoin);
     };
-  }, [roomId]);
+  }, [attemptRejoin]);
+
+  // Open the variant picker for whoever is the on-the-clock dealer the moment the
+  // server flips awaitingDealerPick on. Picking commits-and-deals atomically, so
+  // showing the modal IS the prompt. We re-arm this every time the flag transitions
+  // false→true so subsequent hands (not just hand 1) also prompt the dealer.
+  const awaitingPick = !!state?.awaitingDealerPick;
+  const youAreDealer = !!state?.youAreDealer;
+  useEffect(() => {
+    if (awaitingPick && youAreDealer) {
+      setShowVariants(true);
+    } else if (!awaitingPick) {
+      // Server moved on (either dealt, or selection was cancelled / superseded).
+      setShowVariants(false);
+    }
+  }, [awaitingPick, youAreDealer]);
 
   const doJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,7 +479,33 @@ export default function GameRoom() {
     navigate('/');
   };
 
-  if (needJoin && !state) {
+  if (tableGone) {
+    return (
+      <div className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-6 text-center">
+        <h1 className="font-display text-3xl text-brass-bright">Table unavailable</h1>
+        <p className="text-sm text-ink-dim">
+          This game is no longer on the server (it may have restarted). Start a fresh table or try
+          reconnecting.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              clearSession(roomId);
+              navigate('/');
+            }}
+            className="btn btn-gold px-5 py-2.5"
+          >
+            Back to home
+          </button>
+          <button onClick={attemptRejoin} className="btn btn-ghost px-5 py-2.5">
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (needJoin) {
     return (
       <div className="mx-auto flex min-h-full max-w-sm flex-col justify-center gap-4 p-6">
         <h1 className="text-center font-display text-3xl text-brass-bright">Take a seat</h1>
@@ -290,41 +534,49 @@ export default function GameRoom() {
   const me = state.players.find((p) => p.id === state.youId);
 
   return (
-    <div className="mx-auto flex min-h-full max-w-7xl flex-col gap-3 p-3 sm:p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="font-display text-2xl font-semibold text-brass-bright">Card Room</h1>
-          <span className="rounded-md bg-brass/15 px-2.5 py-1 text-sm font-semibold text-brass-bright ring-1 ring-brass/30">
+    <div className="mx-auto flex h-screen w-full max-w-[1800px] flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-3">
+      {!connected && (
+        <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-sm">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-brass/30 border-t-brass" />
+          <p className="font-display text-xl text-brass-bright">Reconnecting…</p>
+          <p className="text-sm text-ink-dim">Hang tight — restoring your seat.</p>
+        </div>
+      )}
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <h1 className="font-display text-xl font-semibold text-brass-bright sm:text-2xl">Anything Goes Poker</h1>
+          <span className="rounded-md bg-brass/15 px-2 py-0.5 text-xs font-semibold text-brass-bright ring-1 ring-brass/30 sm:px-2.5 sm:py-1 sm:text-sm">
             {VARIANTS[state.settings.variant].name}
           </span>
           <span className="text-xs text-ink-dim">
-            {state.settings.smallBlind}/{state.settings.bigBlind} · hand #{state.game.handNumber}
+            {state.settings.smallBlind}/{state.settings.bigBlind} · #{state.game.handNumber}
           </span>
-        </div>
-        <ShareBar roomId={state.roomId} />
-        <div className="flex items-center gap-2">
+          <span className="hidden max-w-md truncate text-xs italic text-ink-dim md:inline">
+            · {VARIANTS[state.settings.variant].description}
+          </span>
           {!connected && <span className="text-xs text-crimson">reconnecting…</span>}
-          <button onClick={() => setShowLedger(true)} className="btn btn-ghost px-3 py-1.5 text-sm">
+        </div>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button onClick={() => setShowLedger(true)} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
             Ledger
           </button>
           {me && me.status === 'sittingout' ? (
-            <button onClick={() => api.sitIn()} className="btn btn-ghost px-3 py-1.5 text-sm">
+            <button onClick={() => api.sitIn()} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
               Sit in
             </button>
           ) : (
             me && (
-              <button onClick={() => api.sitOut()} className="btn btn-ghost px-3 py-1.5 text-sm">
+              <button onClick={() => api.sitOut()} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
                 Sit out
               </button>
             )
           )}
-          <button onClick={leave} className="btn btn-danger px-3 py-1.5 text-sm">
+          <button onClick={leave} className="btn btn-danger px-2.5 py-1.5 text-sm sm:px-3">
             Leave
           </button>
+          <ShareBar roomId={state.roomId} />
         </div>
       </header>
-
-      <p className="-mt-1 text-xs italic text-ink-dim">{VARIANTS[state.settings.variant].description}</p>
 
       {state.youStatus === 'pending' && (
         <div className="rounded-xl bg-brass/15 px-4 py-2 text-center text-sm text-brass-bright ring-1 ring-brass/25">
@@ -337,20 +589,23 @@ export default function GameRoom() {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col gap-4 lg:flex-row">
-        <main className="flex flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+        <main className="flex min-h-0 flex-1 flex-col gap-2">
           <ResultBanner state={state} />
-          <Table state={state} reactions={reactions} />
-          <div className="panel relative z-10 flex flex-col gap-1 rounded-2xl p-3">
+          <Table state={state} />
+          {/* Bottom prompts: each child styles itself as a w-fit floating pill so
+              nothing stretches across the screen. The strip itself is just a flex
+              column for spacing — no background, no border. */}
+          <div className="relative z-10 flex shrink-0 flex-col items-center gap-2">
             {state.youNote && (
-              <div className="rounded-lg bg-emerald-500/10 px-4 py-2 text-center text-sm text-emerald-200 ring-1 ring-emerald-400/20">
+              <div className="w-fit rounded-2xl bg-emerald-500/15 px-4 py-1.5 text-center text-sm text-emerald-200 ring-1 ring-emerald-400/25 backdrop-blur-sm">
                 {state.youNote}
               </div>
             )}
             <ChooseTray key={state.game.handNumber} state={state} />
             {((state.game.awaitingSelection && !state.youMustSelect) ||
               (state.game.awaitingDiscard && !state.youMustDiscard)) && (
-              <div className="flex items-center justify-center gap-3 py-1 text-sm text-ink-dim">
+              <div className="flex w-fit items-center gap-3 rounded-full bg-black/45 px-3 py-1 text-sm text-ink-dim ring-1 ring-brass/20 backdrop-blur-sm">
                 {state.game.awaitingDiscard ? 'Waiting for players to discard…' : 'Waiting for players to choose…'}
                 {state.youAreHost && (
                   <button onClick={() => api.forceShowdown()} className="btn btn-ghost px-3 py-1 text-xs">
@@ -360,16 +615,39 @@ export default function GameRoom() {
               </div>
             )}
             <ShowHandControls state={state} />
-            <ActionBar state={state} onAct={(a) => api.act(a)} />
-            <div className="flex justify-center pt-1">
-              <ReactionBar />
-            </div>
+            <TableStatus state={state} onOpenPicker={() => setShowVariants(true)} />
           </div>
         </main>
-        {state.youAreHost && <HostPanel state={state} />}
+
+        {/* Right rail: betting actions (always) + host controls (host only). On
+            screens below lg this whole rail wraps under main, so the action panel
+            still ends up at the bottom of the screen instead of competing for
+            horizontal room next to the table. Both children share identical width
+            + padding so they read as a single cohesive sidebar. */}
+        <aside className="flex w-full min-h-0 shrink-0 flex-col gap-3 lg:w-96">
+          <div className="panel w-full shrink-0 rounded-2xl p-3 sm:p-4">
+            <ActionBar state={state} onAct={(a) => api.act(a)} />
+          </div>
+          {state.youAreHost && <HostPanel state={state} />}
+        </aside>
       </div>
 
       {showLedger && <Ledger state={state} onClose={() => setShowLedger(false)} />}
+      {showVariants && (
+        <VariantPicker
+          current={state.settings.variant}
+          onPick={(v) => api.setVariant(v)}
+          onClose={() => setShowVariants(false)}
+          // While the server is waiting on the dealer, the modal is non-dismissable —
+          // picking IS the deal action, so there's no "close without choosing" path.
+          dismissable={!state.awaitingDealerPick || !state.youAreDealer}
+          subtitle={
+            state.awaitingDealerPick && state.youAreDealer
+              ? "It's your deal — choosing locks in the variant and deals the hand."
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

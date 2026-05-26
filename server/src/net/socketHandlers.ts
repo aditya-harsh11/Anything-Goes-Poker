@@ -6,7 +6,7 @@ import type {
   RoomSettings,
   Variant,
 } from '@poker/shared';
-import { VARIANTS, isReaction } from '@poker/shared';
+import { VARIANTS } from '@poker/shared';
 import { roomManager } from '../rooms/roomManager';
 import type { Room } from '../rooms/room';
 
@@ -74,7 +74,25 @@ export function registerHandlers(io: IO): void {
     const requireHost = (room: Room): boolean =>
       !!socket.data.playerId && room.isHost(socket.data.playerId);
 
-    socket.on('createRoom', (data, cb) => {
+    // Register a listener that can never crash the process: a throw in any handler is
+    // logged and reported to that one client instead of taking the whole server down.
+    const register = socket.on.bind(socket) as (event: string, fn: (...a: unknown[]) => void) => void;
+    const on = <E extends keyof ClientToServerEvents>(event: E, handler: ClientToServerEvents[E]): void => {
+      register(event as string, (...args: unknown[]) => {
+        try {
+          (handler as (...a: unknown[]) => void)(...args);
+        } catch (err) {
+          console.error(`[poker] handler "${String(event)}" threw:`, err);
+          try {
+            socket.emit('errorMsg', 'Something went wrong — try again.');
+          } catch {
+            /* ignore secondary failures */
+          }
+        }
+      });
+    };
+
+    on('createRoom', (data, cb) => {
       const settings = clampSettings(data?.settings);
       const room = roomManager.create(settings);
       const host = room.addHost(cleanName(data?.name), socket.id);
@@ -85,7 +103,7 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
-    socket.on('joinRoom', (data, cb) => {
+    on('joinRoom', (data, cb) => {
       const room = roomManager.get(String(data?.roomId ?? ''));
       if (!room) {
         cb({ ok: false, error: 'Room not found' });
@@ -104,7 +122,7 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
-    socket.on('rejoin', (data, cb) => {
+    on('rejoin', (data, cb) => {
       const room = roomManager.get(String(data?.roomId ?? ''));
       if (!room) {
         cb({ ok: false, error: 'Room not found' });
@@ -123,23 +141,24 @@ export function registerHandlers(io: IO): void {
       cb({ ok: false, error: 'Session not found' });
     });
 
-    socket.on('startHand', () => {
+    on('startHand', () => {
       const room = currentRoom();
       if (!room) return;
       if (!requireHost(room)) {
-        socket.emit('errorMsg', 'Only the host can start a hand');
+        socket.emit('errorMsg', 'Only the host can start the hand');
         return;
       }
+      // The host doesn't deal directly anymore — they hand control to the dealer,
+      // who then picks the variant which atomically triggers the actual deal.
       const res = room.startHand();
       if (!res.ok) {
         socket.emit('errorMsg', res.error ?? 'Could not start hand');
         return;
       }
-      pushHoleCards(io, room);
       broadcast(io, room);
     });
 
-    socket.on('playerAction', (action) => {
+    on('playerAction', (action) => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       const parsed = actionSchema.safeParse(action);
@@ -155,7 +174,7 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
-    socket.on('selectCards', (indices) => {
+    on('selectCards', (indices) => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       const arr = Array.isArray(indices) ? indices.map(Number).filter((n) => Number.isFinite(n)) : [];
@@ -163,14 +182,22 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
-    socket.on('discardCard', (index) => {
+    on('selectBombCards', (data) => {
+      const room = currentRoom();
+      if (!room || !socket.data.playerId) return;
+      const toIdx = (v: unknown) => (Array.isArray(v) ? v.map(Number).filter((n) => Number.isFinite(n)) : []);
+      room.selectBombCards(socket.data.playerId, toIdx(data?.a), toIdx(data?.b));
+      broadcast(io, room);
+    });
+
+    on('discardCard', (index) => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       room.discardCard(socket.data.playerId, Number(index));
       broadcast(io, room);
     });
 
-    socket.on('showCards', (indices) => {
+    on('showCards', (indices) => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       const arr = Array.isArray(indices) ? indices.map(Number).filter((n) => Number.isFinite(n)) : [];
@@ -178,37 +205,21 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
-    let lastReactionAt = 0;
-    socket.on('sendReaction', (emoji) => {
-      const room = currentRoom();
-      if (!room || !socket.data.playerId || !isReaction(emoji)) return;
-      const now = Date.now();
-      if (now - lastReactionAt < 400) return; // light anti-spam throttle
-      lastReactionAt = now;
-      const fromName = room.getPlayer(socket.data.playerId)?.name ?? 'Someone';
-      io.to(room.id).emit('reaction', {
-        id: `${now}-${Math.random().toString(36).slice(2, 7)}`,
-        fromId: socket.data.playerId,
-        fromName,
-        emoji,
-      });
-    });
-
-    socket.on('sitOut', () => {
+    on('sitOut', () => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       room.setSittingOut(socket.data.playerId, true);
       broadcast(io, room);
     });
 
-    socket.on('sitIn', () => {
+    on('sitIn', () => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       room.setSittingOut(socket.data.playerId, false);
       broadcast(io, room);
     });
 
-    socket.on('leaveRoom', () => {
+    on('leaveRoom', () => {
       const room = currentRoom();
       if (!room || !socket.data.playerId) return;
       room.removePlayer(socket.data.playerId);
@@ -221,14 +232,14 @@ export function registerHandlers(io: IO): void {
     });
 
     // ---- host controls ----
-    socket.on('hostApproveJoin', (requestId) => {
+    on('hostApproveJoin', (requestId) => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       const player = room.approveJoin(String(requestId));
       if (player) broadcast(io, room);
     });
 
-    socket.on('hostRejectJoin', (requestId) => {
+    on('hostRejectJoin', (requestId) => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       const req = room.rejectJoin(String(requestId));
@@ -238,21 +249,21 @@ export function registerHandlers(io: IO): void {
       }
     });
 
-    socket.on('hostAdjustStack', (data) => {
+    on('hostAdjustStack', (data) => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       room.adjustStack(String(data?.playerId), clampInt(data?.delta, 0, -100_000_000, 100_000_000));
       broadcast(io, room);
     });
 
-    socket.on('hostSetStack', (data) => {
+    on('hostSetStack', (data) => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       room.setStack(String(data?.playerId), clampInt(data?.value, 0, 0, 100_000_000));
       broadcast(io, room);
     });
 
-    socket.on('hostRemovePlayer', (playerId) => {
+    on('hostRemovePlayer', (playerId) => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       const removed = room.removePlayer(String(playerId));
@@ -262,20 +273,29 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
-    socket.on('hostForceShowdown', () => {
+    on('hostForceShowdown', () => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       room.forceShowdown();
       broadcast(io, room);
     });
 
-    socket.on('hostSetVariant', (variant) => {
+    on('hostSetVariant', (variant) => {
       const room = currentRoom();
-      if (!room || !requireHost(room)) return;
-      if (room.setVariant(String(variant))) broadcast(io, room);
+      if (!room || !socket.data.playerId) return;
+      // Only the dealer-on-the-clock may pick — and picking atomically deals the
+      // hand. The legacy "host fallback" was removed: hand 1 now also goes through
+      // this same dealer-picks flow.
+      const res = room.setVariantAndDeal(socket.data.playerId, String(variant));
+      if (!res.ok) {
+        socket.emit('errorMsg', res.error ?? 'Could not pick the game');
+        return;
+      }
+      pushHoleCards(io, room);
+      broadcast(io, room);
     });
 
-    socket.on('hostShuffleSeats', () => {
+    on('hostShuffleSeats', () => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       if (room.shuffleSeats()) broadcast(io, room);

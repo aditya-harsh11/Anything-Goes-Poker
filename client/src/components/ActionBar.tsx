@@ -63,14 +63,14 @@ export default function ActionBar({ state, onAct }: Props) {
       </div>
 
       {canAggress && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-black/30 px-3 py-2 ring-1 ring-brass/15">
+        <div className="flex w-full flex-wrap items-center justify-center gap-2.5 rounded-2xl bg-black/30 px-3 py-2 ring-1 ring-brass/15 sm:w-auto sm:gap-3">
           <input
             type="range"
             min={av.minRaiseTo}
             max={av.maxRaiseTo}
             value={raiseTo}
             onChange={(e) => setRaiseTo(Number(e.target.value))}
-            className="h-2 min-w-[12rem] flex-1 cursor-pointer accent-[#c9a66b]"
+            className="h-2 w-full cursor-pointer accent-[#c9a66b] sm:min-w-[12rem] sm:flex-1"
           />
           <input
             type="number"

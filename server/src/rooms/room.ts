@@ -34,6 +34,8 @@ export interface ServerPlayer {
   lastAction?: string;
   socketId: string | null;
   totalBoughtIn: number;
+  /** Times the host topped this player up after their initial buy-in. */
+  rebuys: number;
   isHost: boolean;
 }
 
@@ -55,6 +57,15 @@ export class Room {
   dealerButton = -1; // seat index of the dealer; -1 until first hand
   handNumber = 0;
   game: PokerGame | null = null;
+
+  /**
+   * Two-phase deal flow: the host clicks "Start hand", which moves the room into
+   * `awaitingDealerPick = true` with `pendingDealerId` locked to whoever holds the
+   * upcoming button. While this flag is true, only that dealer may call setVariant,
+   * which both picks the variant AND immediately deals (one atomic transition).
+   */
+  awaitingDealerPick = false;
+  pendingDealerId: string | null = null;
 
   constructor(id: string, settings: RoomSettings) {
     this.id = id;
@@ -86,6 +97,7 @@ export class Room {
       shownCards: [],
       socketId,
       totalBoughtIn: buyIn,
+      rebuys: 0,
       isHost,
     };
     this.players.set(player.id, player);
@@ -136,6 +148,7 @@ export class Room {
       shownCards: [],
       socketId: req.socketId,
       totalBoughtIn: req.buyIn,
+      rebuys: 0,
       isHost: false,
     };
     this.players.set(player.id, player);
@@ -157,6 +170,11 @@ export class Room {
       this.game.forceFold(playerId);
     }
     this.players.delete(playerId);
+    // If the player who was on the clock to pick a variant just left, drop the
+    // selection state so the host can re-trigger with whoever's now on the button.
+    if (this.awaitingDealerPick && playerId === this.pendingDealerId) {
+      this.cancelSelection();
+    }
     return player;
   }
 
@@ -171,14 +189,20 @@ export class Room {
     const p = this.players.get(playerId);
     if (!p) return;
     p.stack = Math.max(0, p.stack + delta);
-    if (delta > 0) p.totalBoughtIn += delta;
+    if (delta > 0) {
+      p.totalBoughtIn += delta;
+      p.rebuys += 1;
+    }
   }
 
   setStack(playerId: string, value: number): void {
     const p = this.players.get(playerId);
     if (!p) return;
     const v = Math.max(0, Math.floor(value));
-    if (v > p.stack) p.totalBoughtIn += v - p.stack;
+    if (v > p.stack) {
+      p.totalBoughtIn += v - p.stack;
+      p.rebuys += 1;
+    }
     p.stack = v;
   }
 
@@ -197,12 +221,17 @@ export class Room {
     return true;
   }
 
-  /** Set the variant for the next hand (only allowed between hands). */
-  setVariant(variant: string): boolean {
-    if (!(variant in VARIANTS)) return false;
-    if (this.game && !this.game.isComplete()) return false;
+  /**
+   * Dealer locks in the variant for the upcoming hand. Only valid while
+   * `awaitingDealerPick` is true and only callable by the pending dealer. On success
+   * this also immediately deals the hand — picking the variant IS the deal action.
+   */
+  setVariantAndDeal(playerId: string, variant: string): { ok: boolean; error?: string } {
+    if (!this.awaitingDealerPick) return { ok: false, error: 'no variant selection in progress' };
+    if (playerId !== this.pendingDealerId) return { ok: false, error: 'only the dealer can pick the game' };
+    if (!(variant in VARIANTS)) return { ok: false, error: 'unknown variant' };
     this.settings = { ...this.settings, variant: variant as Variant };
-    return true;
+    return this.dealHand();
   }
 
   /** Re-bind a reconnecting socket to an existing seat or pending request via its token. */
@@ -224,7 +253,44 @@ export class Room {
 
   // ---- game flow ----------------------------------------------------------
 
+  /**
+   * Host kicks off the next hand by entering the variant-selection state. We lock
+   * in who the dealer for this hand will be (so subsequent join/leave can't shift
+   * the picker out from under them) but do NOT advance the dealer button yet —
+   * that happens atomically with the actual deal in `dealHand`.
+   */
+  beginSelection(): { ok: boolean; error?: string } {
+    if (this.game && !this.game.isComplete()) {
+      return { ok: false, error: 'a hand is already in progress' };
+    }
+    const participants = this.eligiblePlayers();
+    if (participants.length < 2) {
+      return { ok: false, error: 'need at least 2 players with chips' };
+    }
+    const dealerId = this.nextDealerId();
+    if (!dealerId) return { ok: false, error: 'no eligible dealer' };
+    this.pendingDealerId = dealerId;
+    this.awaitingDealerPick = true;
+    return { ok: true };
+  }
+
+  /** Public entrypoint the host hits — moves us into "dealer is picking the variant". */
   startHand(): { ok: boolean; error?: string } {
+    return this.beginSelection();
+  }
+
+  /** Cancel an in-progress variant selection (host-only escape hatch). */
+  cancelSelection(): void {
+    this.awaitingDealerPick = false;
+    this.pendingDealerId = null;
+  }
+
+  /**
+   * Actually deal the hand. Advances the dealer button, increments the hand number,
+   * wipes prior reveals and spins up a new PokerGame. Only called after the dealer
+   * has locked in a variant via setVariantAndDeal.
+   */
+  private dealHand(): { ok: boolean; error?: string } {
     if (this.game && !this.game.isComplete()) {
       return { ok: false, error: 'a hand is already in progress' };
     }
@@ -254,8 +320,37 @@ export class Room {
       this.handNumber,
       VARIANTS[this.settings.variant],
     );
+    this.awaitingDealerPick = false;
+    this.pendingDealerId = null;
     this.maybeFinalize();
     return { ok: true };
+  }
+
+  /**
+   * The player who will be on the button for the next hand — they pick the variant and
+   * deal ("dealer's choice"). During an active variant selection we return the locked-in
+   * pendingDealerId so subsequent join/leave can't shift the picker out from under them.
+   */
+  nextDealerId(): string | null {
+    if (this.awaitingDealerPick && this.pendingDealerId) {
+      // Sanity check: if the pinned dealer somehow left, fall through to recompute.
+      if (this.players.has(this.pendingDealerId)) return this.pendingDealerId;
+    }
+    const participants = this.eligiblePlayers();
+    if (participants.length < 2) return null;
+    let idx: number;
+    if (this.dealerButton < 0) {
+      idx = 0;
+    } else {
+      idx = participants.findIndex((p) => p.seat > this.dealerButton);
+      if (idx === -1) idx = 0;
+    }
+    return participants[idx].id;
+  }
+
+  /** Is there a hand currently being played (not waiting / not finished)? */
+  handInProgress(): boolean {
+    return !!this.game && !this.game.isComplete();
   }
 
   applyPlayerAction(playerId: string, action: PlayerAction): { ok: boolean; error?: string } {
@@ -269,6 +364,13 @@ export class Room {
   selectCards(playerId: string, indices: number[]): void {
     if (!this.game) return;
     this.game.submitSelection(playerId, indices);
+    this.maybeFinalize();
+  }
+
+  /** Bomb Omaha: a player locks in their hole cards for each of the two boards. */
+  selectBombCards(playerId: string, a: number[], b: number[]): void {
+    if (!this.game) return;
+    this.game.submitBombSelection(playerId, a, b);
     this.maybeFinalize();
   }
 
@@ -287,24 +389,18 @@ export class Room {
   }
 
   /**
-   * When a hand ends, clear betting bookkeeping. Players who reached the end (didn't fold)
-   * KEEP their hole cards until the next hand so they can optionally "Show"; folded players
-   * muck (cards cleared). Cards are wiped for everyone when the next hand starts.
+   * When a hand ends, clear betting bookkeeping. EVERYONE who was dealt in keeps their hole
+   * cards through the showdown window so they can optionally "Show" — even if they folded or
+   * lost (e.g. to flash a bluff). Cards are wiped for everyone when the next hand starts.
    */
   private maybeFinalize(): void {
     if (!this.game || !this.game.isComplete()) return;
     for (const p of this.players.values()) {
       if (!p.inHand) continue;
-      const folded = p.status === 'folded';
       p.committedThisRound = 0;
       p.totalCommitted = 0;
       p.inHand = false;
       p.lastAction = undefined;
-      if (folded) {
-        p.holeCards = [];
-        p.shownCards = [];
-        p.handName = undefined;
-      }
       if (p.status !== 'sittingout') p.status = 'seated';
     }
   }
@@ -392,6 +488,7 @@ export class Room {
       isConnected: p.socketId !== null,
       boughtIn: p.totalBoughtIn,
       netResult: p.stack - p.totalBoughtIn,
+      rebuys: p.rebuys,
       lastAction: p.lastAction,
       holeCards: visible,
       cardBacks,
@@ -413,6 +510,8 @@ export class Room {
     const isPending = this.pending.has(viewerId);
     const isPlayer = this.players.has(viewerId);
     const youAreHost = viewerId === this.hostId;
+    // Between hands, the upcoming dealer chooses the game and deals.
+    const nextDealerId = this.handInProgress() ? null : this.nextDealerId();
 
     const state: RoomState = {
       roomId: this.id,
@@ -423,6 +522,9 @@ export class Room {
       youId: viewerId,
       youAreHost,
       youStatus: youAreHost ? 'host' : isPlayer ? 'seated' : isPending ? 'pending' : 'spectator',
+      nextDealerId,
+      youAreDealer: !!nextDealerId && nextDealerId === viewerId,
+      awaitingDealerPick: this.awaitingDealerPick,
       lastResult: this.game?.lastResult ?? undefined,
     };
 

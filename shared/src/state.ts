@@ -44,6 +44,8 @@ export interface PublicPlayer {
   boughtIn: number;
   /** stack - boughtIn, for end-of-session settle-up. */
   netResult: number;
+  /** Number of times the host topped this player up after their first buy-in. */
+  rebuys: number;
   /** Short label of last action this hand, e.g. "Call", "Raise 200", "Fold". */
   lastAction?: string;
   /** Cards visible to the recipient: their own always; others' only if voluntarily shown. */
@@ -120,6 +122,16 @@ export interface RoomState {
   youId: string;
   youAreHost: boolean;
   youStatus: YourStatus;
+  /** Player who will be the dealer for the next hand (picks the variant + starts it). */
+  nextDealerId?: string | null;
+  /** True when the recipient is the upcoming dealer (can choose the game + deal). */
+  youAreDealer?: boolean;
+  /**
+   * True between the host clicking "Start hand" and the dealer locking in a variant.
+   * While this is true the dealer is on the clock to pick a variant; once they do
+   * the server immediately deals the hand and clears this flag.
+   */
+  awaitingDealerPick: boolean;
   /** Legal actions for the recipient right now (empty if it's not their turn). */
   availableActions?: AvailableActions;
   /** True when the recipient must choose which of their hole cards to use (manual-select showdown). */

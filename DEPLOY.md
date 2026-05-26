@@ -1,4 +1,4 @@
-# Deploying the Card Room
+# Deploying Anything Goes Poker
 
 The catch: the server is a **long-lived Socket.IO (WebSocket) process that holds game
 state in memory**. That rules out Vercel/Netlify *for the server* — their serverless
@@ -41,6 +41,22 @@ Host the static client on **Vercel** and the server on Render/Railway/Fly.
   Redis adapter and moving room state into Redis/DB.
 - **A server restart wipes all active games** (redeploys included). Players can refresh
   to rejoin a *running* server (their seat token is in localStorage), but if the server
-  itself restarted, the rooms are gone. Persisting rooms to a database is the fix when
-  you want durability.
-- Free tiers that sleep on idle will drop everyone when they spin down.
+  itself restarted, the rooms are gone. The client detects this (a failed rejoin) and
+  shows a **"Table unavailable"** screen instead of a dead UI. Persisting rooms to a
+  database is the fix when you want true durability.
+
+### Free-tier idle spin-down (Render et al.) — the big gotcha
+Free tiers decide a service is "idle" from **HTTP request** activity, and a live
+WebSocket sends **none** — so they can spin the server down **mid-game** (~15 min),
+which wipes every table. Two mitigations:
+
+1. **Built-in keep-alive (already in the app):** while a player is at a table the client
+   pings `/health` every 4 min (prod only, `client/src/lib/useRoom.ts`), so the service
+   stays awake as long as someone's playing.
+2. **External uptime pinger (recommended for always-on):** point a free monitor
+   (UptimeRobot, cron-job.org, BetterStack) at `https://<your-app>.onrender.com/health`
+   every 5 min. This keeps the service warm even between sessions. (On Render free this
+   roughly consumes the ~750 free instance-hours/month — enough for one service.)
+
+The bulletproof fix is a **paid instance** (no spin-down) or moving room state into a
+datastore so restarts don't matter.

@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { type RoomState, type Variant, VARIANT_LIST, VARIANTS } from '@poker/shared';
+import { type RoomState } from '@poker/shared';
 import { api } from '../lib/api';
-import Dropdown from './Dropdown';
 
 interface Props {
   state: RoomState;
@@ -9,8 +8,6 @@ interface Props {
 
 export default function HostPanel({ state }: Props) {
   const { joinRequests = [], players, settings, game } = state;
-  const handInProgress = game.phase !== 'waiting' && game.phase !== 'showdown';
-  const eligible = players.filter((p) => p.status !== 'sittingout' && p.stack > 0).length;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
@@ -26,40 +23,76 @@ export default function HostPanel({ state }: Props) {
   };
 
   const heading = 'mb-2 font-display text-lg text-brass-bright';
-  const label = 'mb-1 block text-[11px] font-semibold uppercase tracking-[0.15em] text-ink-dim';
+
+  // Deal section: only meaningful when the table is idle between hands.
+  const handIdle =
+    (game.phase === 'waiting' || game.phase === 'showdown') &&
+    !game.awaitingSelection &&
+    !game.awaitingDiscard;
+  const eligible = players.filter((p) => p.status !== 'sittingout' && p.stack > 0).length;
+  const dealer = players.find((p) => p.id === state.nextDealerId);
+  const firstHand = game.handNumber === 0;
+  const startLabel = firstHand ? 'Start game' : 'Deal next hand';
 
   return (
-    <aside className="panel flex w-full shrink-0 flex-col gap-5 rounded-2xl p-4 lg:w-72">
+    <aside className="panel flex w-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl p-3 sm:p-4">
       <div>
         <h2 className={heading}>Host controls</h2>
-        <label className={label}>Variant — next hand</label>
-        <div className="mb-1">
-          <Dropdown
-            value={settings.variant}
-            disabled={handInProgress}
-            onChange={(v) => api.setVariant(v as Variant)}
-            options={VARIANT_LIST.map((v) => ({ value: v.id, label: v.name }))}
-          />
-        </div>
-        <p className="mb-3 text-xs text-ink-dim">{VARIANTS[settings.variant].description}</p>
+
+        {handIdle && state.awaitingDealerPick ? (
+          // Mid-selection: dealer is on the clock to pick the variant. The host can't
+          // deal — they just see who they're waiting on.
+          <div className="mb-3 rounded-xl bg-brass/10 p-3 ring-1 ring-brass/25">
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brass-bright">
+              Dealer's choice
+            </div>
+            <p className="text-xs text-ink-dim">
+              Waiting for{' '}
+              <span className="font-semibold text-brass-bright">{dealer?.name ?? 'the dealer'}</span>{' '}
+              to pick the game. The hand deals as soon as they choose.
+            </p>
+          </div>
+        ) : handIdle ? (
+          <div className="mb-3 rounded-xl bg-black/35 p-3 ring-1 ring-brass/15">
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.15em] text-brass">
+              {firstHand ? 'Ready to start' : 'Hand complete'}
+            </div>
+            <p className="mb-2 text-xs text-ink-dim">
+              {dealer ? (
+                <>
+                  Dealer <span className="font-semibold text-brass-bright">{dealer.name}</span> picks the game
+                  once you start.
+                </>
+              ) : (
+                'Need at least 2 players to begin.'
+              )}
+            </p>
+            <button
+              onClick={() => api.startHand()}
+              disabled={eligible < 2}
+              className="btn btn-emerald w-full py-2.5 text-sm"
+            >
+              {startLabel}
+            </button>
+            {eligible < 2 && (
+              <p className="mt-1 text-[11px] text-ink-dim">Need at least 2 players with chips.</p>
+            )}
+          </div>
+        ) : (
+          <p className="mb-3 text-xs text-ink-dim">
+            Hand in progress. You can manage chips, approvals and seating below.
+          </p>
+        )}
 
         {game.handNumber === 0 && (
           <button
             onClick={() => api.shuffleSeats()}
             disabled={players.length < 2}
-            className="btn btn-ghost mb-2 w-full py-2 text-sm"
+            className="btn btn-ghost w-full py-2 text-sm"
           >
             Shuffle seats
           </button>
         )}
-        <button
-          onClick={() => api.startHand()}
-          disabled={handInProgress || eligible < 2}
-          className="btn btn-emerald w-full py-2.5"
-        >
-          {handInProgress ? 'Hand in progress' : 'Start hand'}
-        </button>
-        {eligible < 2 && <p className="mt-1 text-xs text-ink-dim">Need at least 2 players with chips.</p>}
       </div>
 
       {joinRequests.length > 0 && (
