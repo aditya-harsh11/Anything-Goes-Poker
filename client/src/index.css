@@ -23,11 +23,15 @@ body,
   height: 100%;
 }
 
-/* The poker room is a "fit in one screen" layout — keep the document from scrolling
-   so the table sizing math (which fills available height) has a stable viewport. */
-html,
-body {
-  overflow: hidden;
+/* On desktop the poker room is a "fit in one screen" layout — keep the document
+   from scrolling so the table sizing math (which fills available height) has a
+   stable viewport. On mobile we let the page scroll so the table can claim a
+   readable min-height instead of being squashed to ~150px under the action panel. */
+@media (min-width: 1024px) {
+  html,
+  body {
+    overflow: hidden;
+  }
 }
 
 body {

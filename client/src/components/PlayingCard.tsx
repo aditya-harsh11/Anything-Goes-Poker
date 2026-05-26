@@ -7,10 +7,10 @@ interface Props {
 }
 
 const SIZES = {
-  xs: { box: 'w-8 h-11', rank: 'text-xs', suit: 'text-sm' },
-  sm: { box: 'w-11 h-15', rank: 'text-sm', suit: 'text-lg' },
-  md: { box: 'w-13 h-18', rank: 'text-base', suit: 'text-2xl' },
-  lg: { box: 'w-16 h-22', rank: 'text-lg', suit: 'text-3xl' },
+  xs: { box: 'w-9 h-12', rank: 'text-sm', suit: 'text-base' },
+  sm: { box: 'w-12 h-17', rank: 'text-base', suit: 'text-xl' },
+  md: { box: 'w-14 h-20', rank: 'text-lg', suit: 'text-2xl' },
+  lg: { box: 'w-18 h-24', rank: 'text-xl', suit: 'text-4xl' },
 };
 
 export default function PlayingCard({ card, hidden, size = 'md' }: Props) {

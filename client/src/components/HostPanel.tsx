@@ -35,7 +35,7 @@ export default function HostPanel({ state }: Props) {
   const startLabel = firstHand ? 'Start game' : 'Deal next hand';
 
   return (
-    <aside className="panel flex w-full min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-2xl p-3 sm:p-4">
+    <aside className="panel flex w-full flex-col gap-4 rounded-2xl p-3 sm:p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
       <div>
         <h2 className={heading}>Host controls</h2>
 

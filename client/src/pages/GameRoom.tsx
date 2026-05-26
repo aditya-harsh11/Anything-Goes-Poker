@@ -534,7 +534,7 @@ export default function GameRoom() {
   const me = state.players.find((p) => p.id === state.youId);
 
   return (
-    <div className="mx-auto flex h-screen w-full max-w-[1800px] flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-3">
+    <div className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:h-screen lg:overflow-hidden">
       {!connected && (
         <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-sm">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-brass/30 border-t-brass" />

@@ -6,8 +6,13 @@ interface Props {
   state: RoomState;
 }
 
-const DESIGN_W = 1150;
-const DESIGN_H = 767;
+// Two design footprints — landscape for desktop's wide slot, portrait for the
+// mobile slot (which is taller than wide). Seat math is percent-based so it
+// works in either footprint without rewriting the position logic.
+const LANDSCAPE = { w: 1150, h: 767 };
+// Portrait is more elongated than the landscape aspect — gives the racetrack a
+// clearly tall body (the "0" look) instead of looking like a fat circle.
+const PORTRAIT = { w: 640, h: 1200 };
 // Cap scale to keep cards crisp; the table fits its slot otherwise.
 const MAX_SCALE = 1.25;
 
@@ -59,12 +64,12 @@ function Seat({
 
   return (
     <div
-      className={`panel flex flex-col items-center gap-0.5 rounded-2xl px-2.5 pb-2 pt-1.5 ${
-        isYou ? 'min-w-36' : 'w-36'
+      className={`panel flex flex-col items-center gap-0.5 rounded-2xl px-3 pb-2 pt-1.5 ${
+        isYou ? 'min-w-40' : 'w-40'
       } ${glowClass} ${dimmed && !isWinner ? 'opacity-55' : ''}`}
     >
       {hasCards && (
-        <div className="flex min-h-11 items-center justify-center gap-0.5">
+        <div className="flex min-h-12 items-center justify-center gap-0.5">
           {faceCards.map((c, i) => (
             <div
               key={i}
@@ -79,24 +84,24 @@ function Seat({
       )}
 
       <div className="flex w-full items-center justify-between gap-1">
-        <span className={`truncate text-sm font-semibold ${isLeader ? 'text-brass-bright' : 'text-ink'}`}>
+        <span className={`truncate text-base font-semibold ${isLeader ? 'text-brass-bright' : 'text-ink'}`}>
           {isLeader && '👑 '}
           {player.name}
           {isYou ? ' (you)' : ''}
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {player.isDealer && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[10px] font-bold text-black">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-black">
               D
             </span>
           )}
           {isSmallBlind && (
-            <span className="flex h-5 items-center justify-center rounded-full bg-sky-300 px-1 text-[10px] font-bold text-black">
+            <span className="flex h-6 items-center justify-center rounded-full bg-sky-300 px-1.5 text-[11px] font-bold text-black">
               SB
             </span>
           )}
           {isBigBlind && (
-            <span className="flex h-5 items-center justify-center rounded-full bg-brass px-1 text-[10px] font-bold text-black">
+            <span className="flex h-6 items-center justify-center rounded-full bg-brass px-1.5 text-[11px] font-bold text-black">
               BB
             </span>
           )}
@@ -104,15 +109,15 @@ function Seat({
       </div>
 
       <div className="flex w-full items-center justify-between">
-        <span className="font-mono text-base font-bold text-emerald-300">{player.stack.toLocaleString()}</span>
+        <span className="font-mono text-lg font-bold text-emerald-300">{player.stack.toLocaleString()}</span>
         {!player.isConnected && <span className="text-xs text-crimson">offline</span>}
       </div>
 
       <div className="flex min-h-5 items-center gap-2 text-center leading-tight">
         {badge ? (
-          <span className={`rounded px-1.5 py-0.5 text-[11px] ${badge.cls}`}>{badge.label}</span>
+          <span className={`rounded px-1.5 py-0.5 text-xs ${badge.cls}`}>{badge.label}</span>
         ) : player.handName ? (
-          <span className="text-xs text-brass">{player.handName}</span>
+          <span className="text-sm text-brass">{player.handName}</span>
         ) : player.lastAction ? (
           <span className="text-sm font-semibold text-ink-dim">{player.lastAction}</span>
         ) : null}
@@ -126,23 +131,27 @@ export default function Table({ state }: Props) {
   const choosing = !!(state.youMustSelect || state.youMustDiscard);
 
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
+  // Pick portrait when the slot is meaningfully taller than wide (mobile);
+  // otherwise landscape (desktop). Re-evaluated on resize, so a desktop user
+  // rotating their phone or shrinking the window picks the right footprint.
+  const [layout, setLayout] = useState({ scale: 1, design: LANDSCAPE });
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    // Fit to whichever axis is tighter so the table fills its slot in the
-    // strict-100vh layout without overflow.
     const update = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (w <= 0 || h <= 0) return;
-      setScale(Math.min(w / DESIGN_W, h / DESIGN_H, MAX_SCALE));
+      const design = h > w * 1.1 ? PORTRAIT : LANDSCAPE;
+      const scale = Math.min(w / design.w, h / design.h, MAX_SCALE);
+      setLayout({ scale, design });
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  const { scale, design } = layout;
 
   const bySeat = new Map<number, PublicPlayer>();
   for (const p of players) bySeat.set(p.seat, p);
@@ -178,13 +187,13 @@ export default function Table({ state }: Props) {
             selection={player.id === youId ? state.yourSelection : undefined}
           />
         ) : (
-          <div className="flex h-20 w-32 items-center justify-center rounded-2xl border-2 border-dashed border-brass/25 text-xs text-ink-dim/70">
+          <div className="flex h-22 w-36 items-center justify-center rounded-2xl border-2 border-dashed border-brass/25 text-sm text-ink-dim/70">
             Seat {seat + 1}
           </div>
         )}
         {player && player.committedThisRound > 0 && (
           <div className="mt-1 flex justify-center">
-            <span className="rounded-full bg-black/70 px-2 py-0.5 font-mono text-xs font-bold text-brass-bright ring-1 ring-brass/30">
+            <span className="rounded-full bg-black/70 px-2.5 py-0.5 font-mono text-sm font-bold text-brass-bright ring-1 ring-brass/30">
               {player.committedThisRound.toLocaleString()}
             </span>
           </div>
@@ -194,17 +203,20 @@ export default function Table({ state }: Props) {
   }
 
   return (
-    <div ref={wrapRef} className="relative w-full flex-1 min-h-0 overflow-hidden">
+    <div ref={wrapRef} className="relative w-full min-h-[calc(100svh-5rem)] overflow-hidden lg:min-h-0 lg:flex-1">
       <div
         className="absolute left-1/2 top-1/2"
         style={{
-          width: DESIGN_W,
-          height: DESIGN_H,
+          width: design.w,
+          height: design.h,
           transform: `translate(-50%, -50%) scale(${scale})`,
           transformOrigin: 'center center',
         }}
       >
-        <div className="felt absolute inset-[7%] rounded-[48%]" />
+        {/* rounded-full gives a true racetrack/pill: semicircle caps + straight
+            sides. On the portrait mobile footprint this reads as a tall "0";
+            on landscape it's a classic horizontal poker-table oval. */}
+        <div className="felt absolute inset-[7%] rounded-full" />
 
         <div className="absolute left-1/2 top-1/2 flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2">
           {game.communityCards2.length > 0 && (
@@ -228,7 +240,7 @@ export default function Table({ state }: Props) {
             </>
           )}
           {game.totalPot > 0 && (
-            <div className="mt-1 rounded-full bg-black/70 px-6 py-1.5 font-mono text-xl font-bold text-brass-bright ring-1 ring-brass/40">
+            <div className="mt-1 rounded-full bg-black/70 px-7 py-2 font-mono text-2xl font-bold text-brass-bright ring-1 ring-brass/40">
               {game.totalPot.toLocaleString()}
             </div>
           )}
