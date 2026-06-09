@@ -56,6 +56,10 @@ export interface ClientToServerEvents {
   hostSetVariant: (variant: Variant) => void;
   /** Randomize seat assignments before the first hand. */
   hostShuffleSeats: () => void;
+  /** Toggle/configure auto-dealing the next hand after a hand ends. */
+  hostSetAutoStart: (data: { enabled: boolean; seconds: number }) => void;
+  /** Toggle/configure auto-picking the variant if the dealer doesn't choose in time. */
+  hostSetAutoPick: (data: { enabled: boolean; seconds: number }) => void;
 }
 
 export interface ServerToClientEvents {

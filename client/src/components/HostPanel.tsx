@@ -1,16 +1,25 @@
 import { useState } from 'react';
 import { type RoomState } from '@poker/shared';
 import { api } from '../lib/api';
+import { useCountdown } from '../lib/useCountdown';
 
 interface Props {
   state: RoomState;
 }
+
+// Compact seconds input: narrow, centered, and with the native up/down spinners removed.
+const numField =
+  'field w-8 py-0.5 text-center text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 
 export default function HostPanel({ state }: Props) {
   const { joinRequests = [], players, settings, game } = state;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [autoSecs, setAutoSecs] = useState(state.autoStart.seconds);
+  const autoCountdown = useCountdown(state.autoStartAt);
+  const [pickSecs, setPickSecs] = useState(state.autoPick.seconds);
+  const pickCountdown = useCountdown(state.autoPickAt);
 
   const startEdit = (playerId: string, current: number) => {
     setEditingId(playerId);
@@ -83,6 +92,72 @@ export default function HostPanel({ state }: Props) {
             Hand in progress. You can manage chips, approvals and seating below.
           </p>
         )}
+
+        {/* Auto controls, side by side at half width each:
+            · Auto-deal — auto-begins the next hand N sec after one ends (dealer still picks).
+            · Auto-pick — if the dealer doesn't pick a game in N sec, the server picks the
+              current/last variant for them and deals. */}
+        <div className="mb-3 flex gap-2">
+          <div className="flex-1 rounded-lg bg-black/25 p-2 ring-1 ring-brass/10">
+            <label className="flex cursor-pointer items-center justify-between gap-1">
+              <span className="text-[11px] font-semibold leading-tight text-brass-bright">Auto-deal</span>
+              <input
+                type="checkbox"
+                checked={state.autoStart.enabled}
+                onChange={(e) => api.setAutoStart(e.target.checked, autoSecs)}
+                className="h-3.5 w-3.5 accent-emerald-500"
+              />
+            </label>
+            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-dim">
+              <input
+                type="number"
+                min={3}
+                max={60}
+                value={autoSecs}
+                onChange={(e) => {
+                  const v = Math.max(3, Math.min(60, Math.floor(Number(e.target.value)) || 0));
+                  setAutoSecs(v);
+                  if (state.autoStart.enabled) api.setAutoStart(true, v);
+                }}
+                className={numField}
+              />
+              <span>s after hand</span>
+            </div>
+            {state.autoStart.enabled && autoCountdown != null && (
+              <p className="mt-1 text-[10px] font-semibold text-emerald-300">deals in {autoCountdown}s</p>
+            )}
+          </div>
+
+          <div className="flex-1 rounded-lg bg-black/25 p-2 ring-1 ring-brass/10">
+            <label className="flex cursor-pointer items-center justify-between gap-1">
+              <span className="text-[11px] font-semibold leading-tight text-brass-bright">Auto-pick</span>
+              <input
+                type="checkbox"
+                checked={state.autoPick.enabled}
+                onChange={(e) => api.setAutoPick(e.target.checked, pickSecs)}
+                className="h-3.5 w-3.5 accent-emerald-500"
+              />
+            </label>
+            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-dim">
+              <input
+                type="number"
+                min={3}
+                max={60}
+                value={pickSecs}
+                onChange={(e) => {
+                  const v = Math.max(3, Math.min(60, Math.floor(Number(e.target.value)) || 0));
+                  setPickSecs(v);
+                  if (state.autoPick.enabled) api.setAutoPick(true, v);
+                }}
+                className={numField}
+              />
+              <span>s for dealer</span>
+            </div>
+            {state.autoPick.enabled && pickCountdown != null && (
+              <p className="mt-1 text-[10px] font-semibold text-amber-300">picks in {pickCountdown}s</p>
+            )}
+          </div>
+        </div>
 
         {game.handNumber === 0 && (
           <button

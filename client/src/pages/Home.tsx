@@ -51,7 +51,7 @@ export default function Home() {
         </div>
         <h1 className="font-display text-5xl font-semibold leading-none text-ink">Anything Goes Poker</h1>
         <p className="mt-3 text-sm text-ink-dim">
-          A private table for your home game. Play-chips only — settle up like gentlemen.
+          A private table for your home game. Play-chips only.
         </p>
       </header>
 

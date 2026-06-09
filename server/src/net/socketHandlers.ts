@@ -95,6 +95,13 @@ export function registerHandlers(io: IO): void {
     on('createRoom', (data, cb) => {
       const settings = clampSettings(data?.settings);
       const room = roomManager.create(settings);
+      // A timer-driven auto-advance (auto-start beginning a hand, or auto-pick dealing one)
+      // fires outside any socket event, so give the room a way to push hole cards + a fresh
+      // snapshot to everyone. pushHoleCards is a no-op when nothing was dealt (auto-start).
+      room.onAutoAdvance = () => {
+        pushHoleCards(io, room);
+        broadcast(io, room);
+      };
       const host = room.addHost(cleanName(data?.name), socket.id);
       socket.data.roomId = room.id;
       socket.data.playerId = host.id;
@@ -299,6 +306,24 @@ export function registerHandlers(io: IO): void {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       if (room.shuffleSeats()) broadcast(io, room);
+    });
+
+    on('hostSetAutoStart', (data) => {
+      const room = currentRoom();
+      if (!room || !requireHost(room)) return;
+      const enabled = !!data?.enabled;
+      const seconds = clampInt(data?.seconds, 7, 3, 60);
+      room.setAutoStart(enabled, seconds);
+      broadcast(io, room);
+    });
+
+    on('hostSetAutoPick', (data) => {
+      const room = currentRoom();
+      if (!room || !requireHost(room)) return;
+      const enabled = !!data?.enabled;
+      const seconds = clampInt(data?.seconds, 7, 3, 60);
+      room.setAutoPick(enabled, seconds);
+      broadcast(io, room);
     });
 
     socket.on('disconnect', () => {

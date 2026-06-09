@@ -26,6 +26,13 @@ export interface RoomSettings {
   maxSeats: number; // 2..8
 }
 
+/** Host toggle for an automatic, timed action (auto-deal / auto-pick). */
+export interface AutoActionSettings {
+  enabled: boolean;
+  /** Delay before the action fires, in seconds (clamped 3..60 server-side). */
+  seconds: number;
+}
+
 export interface PublicPlayer {
   id: string;
   name: string;
@@ -132,6 +139,17 @@ export interface RoomState {
    * the server immediately deals the hand and clears this flag.
    */
   awaitingDealerPick: boolean;
+  /** Host-configurable auto-start: when on, the next hand auto-begins after a hand ends. */
+  autoStart: AutoActionSettings;
+  /**
+   * Epoch ms (server clock) at which the next hand will auto-begin, or null when no
+   * countdown is running. Clients tick down toward this to show "next hand in Ns".
+   */
+  autoStartAt?: number | null;
+  /** Host-configurable auto-pick: if the dealer doesn't pick a game in time, the server picks for them. */
+  autoPick: AutoActionSettings;
+  /** Epoch ms at which the dealer's pick will be auto-chosen, or null when not counting down. */
+  autoPickAt?: number | null;
   /** Legal actions for the recipient right now (empty if it's not their turn). */
   availableActions?: AvailableActions;
   /** True when the recipient must choose which of their hole cards to use (manual-select showdown). */

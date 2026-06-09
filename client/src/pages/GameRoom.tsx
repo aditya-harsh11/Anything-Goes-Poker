@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { SUIT_SYMBOL, VARIANTS, selectionHint, type Card, type RoomState } from '@poker/shared';
 import { socket } from '../lib/socket';
 import { useRoom } from '../lib/useRoom';
+import { useCountdown } from '../lib/useCountdown';
 import { joinRoom, rejoin, api } from '../lib/api';
 import { loadSession, saveSession, clearSession } from '../lib/session';
 import Table from '../components/Table';
@@ -51,6 +52,9 @@ function ResultBanner({ state }: { state: RoomState }) {
  *   - idle (showdown / waiting before host starts): explain who'll do what
  */
 function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: () => void }) {
+  // Called before any early return to satisfy rules-of-hooks; null target → null result.
+  const autoLeft = useCountdown(state.autoStartAt);
+  const pickLeft = useCountdown(state.autoPickAt);
   const handInProgress = state.game.phase !== 'waiting' && state.game.phase !== 'showdown';
   if (handInProgress || state.game.awaitingSelection || state.game.awaitingDiscard) return null;
 
@@ -63,10 +67,15 @@ function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: 
     'flex w-fit items-center justify-center gap-2 rounded-full bg-black/45 px-3 py-1 text-center text-xs ring-1 ring-brass/20 backdrop-blur-sm';
 
   if (state.awaitingDealerPick) {
+    const autoPickNote =
+      state.autoPick.enabled && pickLeft != null ? (
+        <span className="text-amber-300">· auto-picks in {pickLeft}s</span>
+      ) : null;
     if (state.youAreDealer) {
       return (
         <div className={pill}>
           <span className="text-brass-bright">It's your deal — pick the game to deal the hand.</span>
+          {autoPickNote}
           <button onClick={onOpenPicker} className="btn btn-gold px-3 py-1 text-xs">
             Pick the game
           </button>
@@ -76,7 +85,17 @@ function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: 
     return (
       <div className={`${pill} text-ink-dim`}>
         Waiting for{' '}
-        <span className="font-semibold text-brass-bright">{dealer?.name ?? 'the dealer'}</span> to pick the game…
+        <span className="font-semibold text-brass-bright">{dealer?.name ?? 'the dealer'}</span> to pick the game…{' '}
+        {autoPickNote}
+      </div>
+    );
+  }
+
+  // Auto-deal armed: show the shared countdown to everyone at the table.
+  if (state.autoStart.enabled && autoLeft != null) {
+    return (
+      <div className={`${pill} text-emerald-200`}>
+        Next hand in <span className="font-semibold text-emerald-300">{autoLeft}s</span>…
       </div>
     );
   }

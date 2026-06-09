@@ -38,4 +38,8 @@ export const api = {
   removePlayer: (playerId: string) => socket.emit('hostRemovePlayer', playerId),
   setVariant: (variant: Variant) => socket.emit('hostSetVariant', variant),
   shuffleSeats: () => socket.emit('hostShuffleSeats'),
+  setAutoStart: (enabled: boolean, seconds: number) =>
+    socket.emit('hostSetAutoStart', { enabled, seconds }),
+  setAutoPick: (enabled: boolean, seconds: number) =>
+    socket.emit('hostSetAutoPick', { enabled, seconds }),
 };

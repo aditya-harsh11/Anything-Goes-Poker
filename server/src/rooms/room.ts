@@ -67,6 +67,31 @@ export class Room {
   awaitingDealerPick = false;
   pendingDealerId: string | null = null;
 
+  /**
+   * Auto-start: when enabled, the room arms a timer the moment a hand ends and, when it
+   * fires, auto-triggers `startHand()` (the dealer still picks the variant). Disabled by
+   * default — the host toggles it via `setAutoStart`.
+   */
+  autoStart: { enabled: boolean; seconds: number } = { enabled: false, seconds: 7 };
+  private autoStartTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoStartAt: number | null = null;
+
+  /**
+   * Auto-pick: when enabled, if the on-the-clock dealer doesn't choose a variant within
+   * `seconds`, the server picks the current/last variant for them and deals. Disabled by
+   * default — the host toggles it via `setAutoPick`.
+   */
+  autoPick: { enabled: boolean; seconds: number } = { enabled: false, seconds: 7 };
+  private autoPickTimer: ReturnType<typeof setTimeout> | null = null;
+  private autoPickAt: number | null = null;
+
+  /**
+   * Set by the socket layer so a timer-driven auto-advance (auto-start beginning the next
+   * hand, or auto-pick dealing one) can push fresh hole cards + a snapshot to every client.
+   * Null until wired up.
+   */
+  onAutoAdvance: (() => void) | null = null;
+
   constructor(id: string, settings: RoomSettings) {
     this.id = id;
     this.settings = settings;
@@ -267,10 +292,14 @@ export class Room {
     if (participants.length < 2) {
       return { ok: false, error: 'need at least 2 players with chips' };
     }
+    // A selection is starting (manually or via auto-start) — drop any pending countdown.
+    this.clearAutoStartTimer();
     const dealerId = this.nextDealerId();
     if (!dealerId) return { ok: false, error: 'no eligible dealer' };
     this.pendingDealerId = dealerId;
     this.awaitingDealerPick = true;
+    // Put the dealer on the clock if auto-pick is on.
+    this.scheduleAutoPick();
     return { ok: true };
   }
 
@@ -283,6 +312,94 @@ export class Room {
   cancelSelection(): void {
     this.awaitingDealerPick = false;
     this.pendingDealerId = null;
+    this.clearAutoPickTimer();
+  }
+
+  // ---- auto-start ---------------------------------------------------------
+
+  /** Host enables/disables auto-start and sets the post-hand delay (clamped 3..60s). */
+  setAutoStart(enabled: boolean, seconds: number): void {
+    const secs = Math.max(3, Math.min(60, Math.floor(seconds) || 7));
+    this.autoStart = { enabled, seconds: secs };
+    if (!enabled) {
+      this.clearAutoStartTimer();
+    } else {
+      // Re-arm the countdown with the new delay if we're sitting idle between hands.
+      this.clearAutoStartTimer();
+      this.scheduleAutoStart();
+    }
+  }
+
+  private clearAutoStartTimer(): void {
+    if (this.autoStartTimer) {
+      clearTimeout(this.autoStartTimer);
+      this.autoStartTimer = null;
+    }
+    this.autoStartAt = null;
+  }
+
+  /**
+   * Arm the auto-start countdown if conditions allow: feature on, nothing already armed,
+   * no hand in progress, not mid-pick, and enough players. Safe to call repeatedly — it
+   * no-ops while a timer is already pending.
+   */
+  private scheduleAutoStart(): void {
+    if (!this.autoStart.enabled || this.autoStartTimer) return;
+    if (this.handInProgress() || this.awaitingDealerPick) return;
+    if (this.eligiblePlayers().length < 2) return;
+    const ms = this.autoStart.seconds * 1000;
+    this.autoStartAt = Date.now() + ms;
+    this.autoStartTimer = setTimeout(() => {
+      this.autoStartTimer = null;
+      this.autoStartAt = null;
+      if (!this.autoStart.enabled) return;
+      // Begins the dealer's-choice pick (same as the host clicking "Deal next hand").
+      // If it can't start right now (e.g. players dropped below 2) it simply no-ops.
+      this.startHand();
+      this.onAutoAdvance?.();
+    }, ms);
+  }
+
+  // ---- auto-pick ----------------------------------------------------------
+
+  /** Host enables/disables auto-pick and sets how long to wait on the dealer (3..60s). */
+  setAutoPick(enabled: boolean, seconds: number): void {
+    const secs = Math.max(3, Math.min(60, Math.floor(seconds) || 7));
+    this.autoPick = { enabled, seconds: secs };
+    this.clearAutoPickTimer();
+    // If we're already waiting on a dealer, (re)arm the countdown with the new delay.
+    if (enabled) this.scheduleAutoPick();
+  }
+
+  private clearAutoPickTimer(): void {
+    if (this.autoPickTimer) {
+      clearTimeout(this.autoPickTimer);
+      this.autoPickTimer = null;
+    }
+    this.autoPickAt = null;
+  }
+
+  /**
+   * Arm the auto-pick countdown while a dealer is on the clock. When it fires, the server
+   * deals the current/last variant on the dealer's behalf. No-ops unless we're actually
+   * awaiting a pick and the feature is on.
+   */
+  private scheduleAutoPick(): void {
+    if (!this.autoPick.enabled || this.autoPickTimer) return;
+    if (!this.awaitingDealerPick) return;
+    const ms = this.autoPick.seconds * 1000;
+    this.autoPickAt = Date.now() + ms;
+    this.autoPickTimer = setTimeout(() => {
+      this.autoPickTimer = null;
+      this.autoPickAt = null;
+      if (!this.autoPick.enabled || !this.awaitingDealerPick) return;
+      // Pick a random variant on the dealer's behalf, then deal (dealHand reads settings.variant).
+      const keys = Object.keys(VARIANTS) as Variant[];
+      const choice = keys[Math.floor(Math.random() * keys.length)];
+      this.settings = { ...this.settings, variant: choice };
+      this.dealHand();
+      this.onAutoAdvance?.();
+    }, ms);
   }
 
   /**
@@ -322,6 +439,7 @@ export class Room {
     );
     this.awaitingDealerPick = false;
     this.pendingDealerId = null;
+    this.clearAutoPickTimer();
     this.maybeFinalize();
     return { ok: true };
   }
@@ -403,6 +521,8 @@ export class Room {
       p.lastAction = undefined;
       if (p.status !== 'sittingout') p.status = 'seated';
     }
+    // Hand's over — if auto-start is on, arm the countdown for the next deal.
+    this.scheduleAutoStart();
   }
 
   /** A player voluntarily reveals some of their hole cards after a hand. */
@@ -525,6 +645,10 @@ export class Room {
       nextDealerId,
       youAreDealer: !!nextDealerId && nextDealerId === viewerId,
       awaitingDealerPick: this.awaitingDealerPick,
+      autoStart: this.autoStart,
+      autoStartAt: this.autoStartAt,
+      autoPick: this.autoPick,
+      autoPickAt: this.autoPickAt,
       lastResult: this.game?.lastResult ?? undefined,
     };
 
