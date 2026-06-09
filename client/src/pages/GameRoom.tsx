@@ -434,6 +434,7 @@ export default function GameRoom() {
   const [name, setName] = useState('');
   const [showLedger, setShowLedger] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
+  const [showVariantInfo, setShowVariantInfo] = useState(false);
   const [tableGone, setTableGone] = useState(false);
 
   const attemptRejoin = useCallback(() => {
@@ -564,9 +565,25 @@ export default function GameRoom() {
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <h1 className="font-display text-xl font-semibold text-brass-bright sm:text-2xl">Anything Goes Poker</h1>
-          <span className="rounded-md bg-brass/15 px-2 py-0.5 text-xs font-semibold text-brass-bright ring-1 ring-brass/30 sm:px-2.5 sm:py-1 sm:text-sm">
-            {VARIANTS[state.settings.variant].name}
-          </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowVariantInfo((v) => !v)}
+              className="flex items-center gap-1 rounded-md bg-brass/15 px-2 py-0.5 text-xs font-semibold text-brass-bright ring-1 ring-brass/30 transition hover:bg-brass/25 sm:px-2.5 sm:py-1 sm:text-sm md:cursor-default md:hover:bg-brass/15"
+              aria-label="Show game rules"
+            >
+              {VARIANTS[state.settings.variant].name}
+              <span className="text-[10px] text-brass-bright/70 md:hidden">ⓘ</span>
+            </button>
+            {showVariantInfo && (
+              <>
+                <div className="fixed inset-0 z-[70] md:hidden" onClick={() => setShowVariantInfo(false)} />
+                <div className="panel absolute right-0 top-full z-[71] mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg p-3 text-xs italic leading-snug text-ink-dim shadow-xl md:hidden">
+                  {VARIANTS[state.settings.variant].description}
+                </div>
+              </>
+            )}
+          </div>
           <span className="text-xs text-ink-dim">
             {state.settings.smallBlind}/{state.settings.bigBlind} · #{state.game.handNumber}
           </span>
