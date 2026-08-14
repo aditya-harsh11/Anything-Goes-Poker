@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* ---- Design tokens: "Midnight Card Room" ---------------------------------- */
+/* ---- Design tokens: "Midnight Poker" ---------------------------------- */
 @theme {
   --font-sans: 'Outfit', system-ui, sans-serif;
   --font-display: 'Fraunces', Georgia, serif;

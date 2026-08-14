@@ -2,7 +2,7 @@
 # Serves the built client and the Socket.IO server from a single free web service.
 services:
   - type: web
-    name: anything-goes-poker
+    name: playpoker
     runtime: node
     plan: free
     buildCommand: npm install && npm run build

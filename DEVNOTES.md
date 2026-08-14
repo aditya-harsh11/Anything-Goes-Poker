@@ -107,7 +107,7 @@ Check/Fold bar appeared over the discard prompt and corrupted the round.)
   tap sequence through to `PokerGame.selections`. Auto-pick (dealer stalls past the timer) bypasses the
   number step too, same as it bypasses every other human choice — it rolls a random 0-999 target.
 - **Fold-win**: `endHandByFold` (no reveal).
-- **Reveal order at showdown** (`applyShowdownReveals`, used by `awardFromSolved`): standard card-room
+- **Reveal order at showdown** (`applyShowdownReveals`, used by `awardFromSolved`): standard poker
   order — the **last aggressor** on the final street shows first (or the **first live player left of
   the button** if the street was checked down), then clockwise (`revealOrder`). Each later contender
   only turns up if they **match/beat** the best hand shown so far; otherwise they **muck** (stay
@@ -182,7 +182,7 @@ shows these between hands: dealer sees "Your deal — pick the game" + Change ga
   a minimal set of payments from `netResult` (`lib/settle.ts`) so the table can cash out.
 - `components/Dropdown.tsx` — themed dropdown (now unused after the picker moved to the modal; kept as
   a reusable component).
-- UI theme = "Midnight Card Room": Fraunces (display) / Outfit (body) / Space Mono (numbers); design
+- UI theme = "Midnight Poker": Fraunces (display) / Outfit (body) / Space Mono (numbers); design
   tokens + `.panel`/`.btn`/`.felt` in `index.css`.
 
 ## Resilience (server)

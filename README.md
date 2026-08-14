@@ -11,7 +11,7 @@ side pots, hand evaluation, and pot awarding, and the client only renders
 state it's told about. Reconnect mid-hand from a refresh and your seat is
 still yours. Play money only — settle up offline.
 
-**Live:** https://anything-goes-poker.onrender.com
+**Live:** https://playpoker.onrender.com
 
 ## Stack
 
