@@ -16,6 +16,21 @@ const PORTRAIT = { w: 640, h: 1200 };
 // Cap scale to keep cards crisp; the table fits its slot otherwise.
 const MAX_SCALE = 1.25;
 
+// Seat pods sit outside the felt on an ellipse (radius below), so at the ellipse's
+// horizontal/vertical extremes a pod's own half-width/height can stick out past the
+// design canvas's edge (e.g. the leftmost-middle and rightmost-middle seats at 8
+// players). Reserving this much extra canvas before fitting to the container keeps
+// every pod inside the clip boundary instead of getting cut off by `overflow-hidden`
+// (which, on the side next to the action rail, reads as "covered by the sidebar").
+const SEAT_RADIUS_X = 47;
+const SEAT_RADIUS_Y = 39;
+const SEAT_HALF_W = 80; // px at design scale=1 (opponent pod is w-40 = 160px)
+const SEAT_HALF_H = 48; // px at design scale=1 (measured pod height ≈ 92px)
+function bleedMargin(designSize: number, radiusPct: number, halfPx: number): number {
+  const overhang = halfPx - ((50 - radiusPct) / 100) * designSize;
+  return Math.max(0, overhang) + 4; // +4px rounding buffer
+}
+
 function statusBadge(p: PublicPlayer): { label: string; cls: string } | null {
   if (p.status === 'folded') return { label: 'Folded', cls: 'bg-black/50 text-ink-dim' };
   if (p.status === 'allin') return { label: 'All-in', cls: 'bg-brass text-black' };
@@ -143,7 +158,13 @@ export default function Table({ state }: Props) {
       const h = el.clientHeight;
       if (w <= 0 || h <= 0) return;
       const design = h > w * 1.1 ? PORTRAIT : LANDSCAPE;
-      const scale = Math.min(w / design.w, h / design.h, MAX_SCALE);
+      const marginX = bleedMargin(design.w, SEAT_RADIUS_X, SEAT_HALF_W);
+      const marginY = bleedMargin(design.h, SEAT_RADIUS_Y, SEAT_HALF_H);
+      const scale = Math.min(
+        w / (design.w + 2 * marginX),
+        h / (design.h + 2 * marginY),
+        MAX_SCALE,
+      );
       setLayout({ scale, design });
     };
     update();
