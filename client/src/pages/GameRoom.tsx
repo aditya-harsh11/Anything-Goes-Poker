@@ -6,11 +6,13 @@ import { useRoom } from '../lib/useRoom';
 import { useCountdown } from '../lib/useCountdown';
 import { joinRoom, rejoin, api } from '../lib/api';
 import { loadSession, saveSession, clearSession } from '../lib/session';
+import { computeSettlement } from '../lib/settle';
 import Table from '../components/Table';
 import ActionBar from '../components/ActionBar';
 import HostPanel from '../components/HostPanel';
 import PlayingCard from '../components/PlayingCard';
 import VariantPicker from '../components/VariantPicker';
+import NumberField from '../components/NumberField';
 
 function ResultBanner({ state }: { state: RoomState }) {
   const r = state.lastResult;
@@ -46,9 +48,11 @@ function ResultBanner({ state }: { state: RoomState }) {
 }
 
 /**
- * Bottom-strip status line for between-hand states. Three distinct messages:
+ * Bottom-strip status line for between-hand states. Distinct messages:
  *   - awaitingDealerPick + you're the dealer: prompt to pick (modal also opens)
  *   - awaitingDealerPick + you're not the dealer: "Waiting for [Name] to pick…"
+ *   - awaitingTripleNineTarget (Number, after the variant's picked): "Waiting for
+ *     [Name] to pick a number…" (the dealer sees the number-entry modal instead)
  *   - idle (showdown / waiting before host starts): explain who'll do what
  */
 function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: () => void }) {
@@ -66,6 +70,18 @@ function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: 
   const pill =
     'flex w-fit items-center justify-center gap-2 rounded-full bg-black/45 px-3 py-1 text-center text-xs ring-1 ring-brass/20 backdrop-blur-sm';
 
+  // Number: dealer picked the variant, now sets the target — the number-entry modal
+  // covers this for the dealer, so only render the waiting pill for everyone else.
+  if (state.awaitingTripleNineTarget) {
+    if (state.youAreDealer) return null;
+    return (
+      <div className={`${pill} text-ink-dim`}>
+        Waiting for <span className="font-semibold text-brass-bright">{dealer?.name ?? 'the dealer'}</span> to pick a
+        number…
+      </div>
+    );
+  }
+
   if (state.awaitingDealerPick) {
     const autoPickNote =
       state.autoPick.enabled && pickLeft != null ? (
@@ -74,7 +90,7 @@ function TableStatus({ state, onOpenPicker }: { state: RoomState; onOpenPicker: 
     if (state.youAreDealer) {
       return (
         <div className={pill}>
-          <span className="text-brass-bright">It's your deal — pick the game to deal the hand.</span>
+          <span className="text-brass-bright">It's your deal, pick the game to deal the hand.</span>
           {autoPickNote}
           <button onClick={onOpenPicker} className="btn btn-gold px-3 py-1 text-xs">
             Pick the game
@@ -218,6 +234,78 @@ function PartitionCard({
   );
 }
 
+/**
+ * Number: tap 3 of your 5 cards, in order, to build a 3-digit number against the
+ * dealer's target (2-9 = 2-9, T/J/Q/K = 0, A = 1 — first tap is the hundreds digit).
+ * The other 2 automatically play a normal poker hand. Unlike every other selection
+ * tray, order matters here, so picks are tracked as an ordered array, not a set.
+ */
+function TripleNineTray({ state }: { state: RoomState }) {
+  const me = state.players.find((p) => p.id === state.youId);
+  const cards = me?.holeCards ?? [];
+  const [order, setOrder] = useState<number[]>([]);
+
+  if (cards.length === 0) return null;
+
+  const digitOf = (card: Card) => (card.rank === 'A' ? 1 : ['T', 'J', 'Q', 'K'].includes(card.rank) ? 0 : Number(card.rank));
+
+  const toggle = (i: number) =>
+    setOrder((cur) => {
+      if (cur.includes(i)) return cur.filter((x) => x !== i);
+      if (cur.length >= 3) return cur;
+      return [...cur, i];
+    });
+
+  const canConfirm = order.length === 3;
+  const numberPreview = order.map((i) => digitOf(cards[i])).join('');
+
+  return (
+    <div className="mx-auto flex w-fit flex-col items-center gap-3 rounded-2xl bg-black/45 px-4 py-3 ring-1 ring-brass/20 backdrop-blur-sm">
+      <div className="flex flex-wrap items-end justify-center gap-2">
+        {cards.map((card, i) => {
+          const pos = order.indexOf(i);
+          const picked = pos !== -1;
+          const ring = picked
+            ? 'ring-4 ring-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.7)] -translate-y-2'
+            : canConfirm
+              ? 'ring-2 ring-sky-300/70 opacity-90'
+              : 'opacity-70 hover:-translate-y-1 hover:opacity-100';
+          return (
+            <button key={i} onClick={() => toggle(i)} className={`relative rounded-lg transition ${ring}`}>
+              <PlayingCard card={card} size="sm" />
+              {picked && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 text-[10px] font-bold text-black">
+                  {pos + 1}
+                </span>
+              )}
+              {!picked && canConfirm && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-sky-300 text-[10px] font-bold text-black">
+                  P
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+        <span className="text-ink-dim">
+          Tap 3 in order for your <span className="text-emerald-300">number</span>
+          {canConfirm && (
+            <>
+              {': '}
+              <span className="font-mono font-bold text-brass-bright">{numberPreview}</span>
+            </>
+          )}{' '}
+          · other 2 play <span className="text-sky-300">Poker</span>
+        </span>
+        <button disabled={!canConfirm} onClick={() => api.selectCards(order)} className="btn btn-emerald px-5 py-2">
+          Confirm
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Only rendered when the player must choose cards (select or discard). */
 function ChooseTray({ state }: { state: RoomState }) {
   const me = state.players.find((p) => p.id === state.youId);
@@ -233,6 +321,8 @@ function ChooseTray({ state }: { state: RoomState }) {
   if (mode === 'none' || cards.length === 0) return null;
   // Bomb pots that require choosing (Bomb Omaha) use a dedicated two-board chooser.
   if (mode === 'select' && variant.bombPot) return <BombSelectTray state={state} />;
+  // Number: order matters (it forms the digits), so it gets its own ordered picker.
+  if (mode === 'select' && variant.tripleNine) return <TripleNineTray state={state} />;
 
   const toggle = (i: number) => {
     if (mode === 'discard') setSel((cur) => (cur[0] === i ? [] : [i]));
@@ -296,7 +386,7 @@ function ChooseTray({ state }: { state: RoomState }) {
       <div className="flex items-center gap-3 text-sm">
         <span className="text-ink-dim">
           {mode === 'discard' ? (
-            `Pick a card to discard — ${sel.length}/1`
+            `Pick a card to discard (${sel.length}/1)`
           ) : isPartition ? (
             <>
               Pick 2 for <span className="text-emerald-300">Poker</span> · other 2 play{' '}
@@ -353,6 +443,38 @@ function ShowHandControls({ state }: { state: RoomState }) {
           className="btn btn-gold px-4 py-1.5"
         >
           {cards.length === 2 ? 'Show both' : `Show all (${cards.length})`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Number: after the dealer picks the variant, they set this hand's target (0-999)
+ * before it deals — mirrors VariantPicker's forced, non-dismissable "you're on the
+ * clock" pattern, since picking the game already committed to needing this input.
+ */
+function TripleNinePicker({ onConfirm }: { onConfirm: (n: number) => void }) {
+  const [n, setN] = useState(0);
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-3">
+      <div className="panel w-full max-w-sm rounded-2xl p-5">
+        <h2 className="font-display text-xl text-brass-bright sm:text-2xl">Pick the number</h2>
+        <p className="mt-0.5 text-xs text-ink-dim">It's your deal, set this hand's target, then deal.</p>
+        <p className="mt-3 text-xs leading-snug text-ink-dim">
+          Everyone's closest 3-card number wins half the pot. 2-9 = 2-9, T/J/Q/K = 0, A = 1.
+        </p>
+        <div className="mt-4 flex items-center justify-center">
+          <NumberField
+            min={0}
+            max={999}
+            value={n}
+            onChange={(v) => setN(Math.max(0, Math.min(999, Math.floor(v))))}
+            className="w-32 rounded-lg border border-brass/30 bg-black/40 px-3 py-2 text-center font-mono text-3xl font-bold text-ink outline-none focus:border-brass/60"
+          />
+        </div>
+        <button onClick={() => onConfirm(n)} className="btn btn-gold mt-4 w-full py-2.5">
+          Deal
         </button>
       </div>
     </div>
@@ -423,6 +545,45 @@ function Ledger({ state, onClose }: { state: RoomState; onClose: () => void }) {
   );
 }
 
+/** "Who pays who" — settle up: the minimal set of payments that clears everyone's net result. */
+function SettleUp({ state, onClose }: { state: RoomState; onClose: () => void }) {
+  const payments = computeSettlement(state.players);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="panel w-full max-w-md rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-2xl text-brass-bright">Settle up</h2>
+          <button onClick={onClose} className="btn btn-ghost px-3 py-1 text-xs">
+            Close
+          </button>
+        </div>
+        {payments.length === 0 ? (
+          <p className="py-4 text-center text-sm text-ink-dim">Everyone's even, no payments needed.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {payments.map((p, i) => (
+              <li
+                key={i}
+                className="flex items-center justify-between gap-2 rounded-xl bg-black/30 p-3 ring-1 ring-brass/10"
+              >
+                <span className="text-sm">
+                  <span className="font-semibold text-crimson">{p.from}</span>
+                  <span className="mx-1.5 text-ink-dim">pays</span>
+                  <span className="font-semibold text-emerald-300">{p.to}</span>
+                </span>
+                <span className="font-mono text-lg font-bold text-brass-bright">{p.amount.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-xs text-ink-dim">
+          Based on each player's net result (stack − bought in) right now.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function GameRoom() {
   const { roomId: rawId } = useParams();
   const roomId = (rawId ?? '').toLowerCase();
@@ -433,7 +594,9 @@ export default function GameRoom() {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
   const [showLedger, setShowLedger] = useState(false);
+  const [showSettle, setShowSettle] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
+  const [showTripleNine, setShowTripleNine] = useState(false);
   const [showVariantInfo, setShowVariantInfo] = useState(false);
   const [tableGone, setTableGone] = useState(false);
 
@@ -468,17 +631,24 @@ export default function GameRoom() {
   // Open the variant picker for whoever is the on-the-clock dealer the moment the
   // server flips awaitingDealerPick on. Picking commits-and-deals atomically, so
   // showing the modal IS the prompt. We re-arm this every time the flag transitions
-  // false→true so subsequent hands (not just hand 1) also prompt the dealer.
+  // false→true so subsequent hands (not just hand 1) also prompt the dealer. Number
+  // (Triple 9) needs one more input first: once the dealer picks it, the server flips
+  // awaitingTripleNineTarget instead of dealing — swap to the number-entry modal.
   const awaitingPick = !!state?.awaitingDealerPick;
+  const awaitingNumber = !!state?.awaitingTripleNineTarget;
   const youAreDealer = !!state?.youAreDealer;
   useEffect(() => {
-    if (awaitingPick && youAreDealer) {
+    if (awaitingNumber && youAreDealer) {
+      setShowVariants(false);
+      setShowTripleNine(true);
+    } else if (awaitingPick && youAreDealer) {
       setShowVariants(true);
     } else if (!awaitingPick) {
       // Server moved on (either dealt, or selection was cancelled / superseded).
       setShowVariants(false);
     }
-  }, [awaitingPick, youAreDealer]);
+    if (!awaitingNumber) setShowTripleNine(false);
+  }, [awaitingPick, awaitingNumber, youAreDealer]);
 
   const doJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,12 +729,12 @@ export default function GameRoom() {
         <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-sm">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-brass/30 border-t-brass" />
           <p className="font-display text-xl text-brass-bright">Reconnecting…</p>
-          <p className="text-sm text-ink-dim">Hang tight — restoring your seat.</p>
+          <p className="text-sm text-ink-dim">Hang tight, restoring your seat.</p>
         </div>
       )}
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <h1 className="font-display text-xl font-semibold text-brass-bright sm:text-2xl">Anything Goes Poker</h1>
+          <h1 className="font-display text-xl font-semibold text-brass-bright sm:text-2xl">Play Poker</h1>
           <div className="relative">
             <button
               type="button"
@@ -573,12 +743,12 @@ export default function GameRoom() {
               aria-label="Show game rules"
             >
               {VARIANTS[state.settings.variant].name}
-              <span className="text-[10px] text-brass-bright/70 md:hidden">ⓘ</span>
+              <span className="text-xs font-bold text-brass-bright md:hidden">ⓘ</span>
             </button>
             {showVariantInfo && (
               <>
                 <div className="fixed inset-0 z-[70] md:hidden" onClick={() => setShowVariantInfo(false)} />
-                <div className="panel absolute right-0 top-full z-[71] mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg p-3 text-xs italic leading-snug text-ink-dim shadow-xl md:hidden">
+                <div className="panel absolute left-0 top-full z-[71] mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg p-3 text-xs italic leading-snug text-ink-dim shadow-xl md:hidden">
                   {VARIANTS[state.settings.variant].description}
                 </div>
               </>
@@ -592,10 +762,16 @@ export default function GameRoom() {
           </span>
           {!connected && <span className="text-xs text-crimson">reconnecting…</span>}
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <button onClick={() => setShowLedger(true)} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
             Ledger
           </button>
+          {state.youAreHost && (
+            <button onClick={() => setShowSettle(true)} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
+              <span className="sm:hidden">Payouts</span>
+              <span className="hidden sm:inline">Who pays who</span>
+            </button>
+          )}
           {me && me.status === 'sittingout' ? (
             <button onClick={() => api.sitIn()} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
               Sit in
@@ -669,6 +845,7 @@ export default function GameRoom() {
       </div>
 
       {showLedger && <Ledger state={state} onClose={() => setShowLedger(false)} />}
+      {showSettle && <SettleUp state={state} onClose={() => setShowSettle(false)} />}
       {showVariants && (
         <VariantPicker
           current={state.settings.variant}
@@ -679,11 +856,12 @@ export default function GameRoom() {
           dismissable={!state.awaitingDealerPick || !state.youAreDealer}
           subtitle={
             state.awaitingDealerPick && state.youAreDealer
-              ? "It's your deal — choosing locks in the variant and deals the hand."
+              ? "It's your deal, choosing locks in the variant and deals the hand."
               : undefined
           }
         />
       )}
+      {showTripleNine && <TripleNinePicker onConfirm={(n) => api.setTripleNineNumber(n)} />}
     </div>
   );
 }

@@ -54,6 +54,8 @@ export interface ClientToServerEvents {
   hostForceShowdown: () => void;
   /** Choose the variant for the next hand (only allowed between hands). */
   hostSetVariant: (variant: Variant) => void;
+  /** Number (Triple 9): after picking the variant, the dealer sets this hand's target (0-999) — locks it in and deals. */
+  hostSetTripleNineNumber: (n: number) => void;
   /** Randomize seat assignments before the first hand. */
   hostShuffleSeats: () => void;
   /** Toggle/configure auto-dealing the next hand after a hand ends. */

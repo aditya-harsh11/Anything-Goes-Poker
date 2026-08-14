@@ -302,6 +302,18 @@ export function registerHandlers(io: IO): void {
       broadcast(io, room);
     });
 
+    on('hostSetTripleNineNumber', (n) => {
+      const room = currentRoom();
+      if (!room || !socket.data.playerId) return;
+      const res = room.setTripleNineTargetAndDeal(socket.data.playerId, Number(n));
+      if (!res.ok) {
+        socket.emit('errorMsg', res.error ?? 'Could not set the number');
+        return;
+      }
+      pushHoleCards(io, room);
+      broadcast(io, room);
+    });
+
     on('hostShuffleSeats', () => {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
@@ -312,7 +324,7 @@ export function registerHandlers(io: IO): void {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       const enabled = !!data?.enabled;
-      const seconds = clampInt(data?.seconds, 7, 3, 60);
+      const seconds = clampInt(data?.seconds, 5, 3, 60);
       room.setAutoStart(enabled, seconds);
       broadcast(io, room);
     });
@@ -321,7 +333,7 @@ export function registerHandlers(io: IO): void {
       const room = currentRoom();
       if (!room || !requireHost(room)) return;
       const enabled = !!data?.enabled;
-      const seconds = clampInt(data?.seconds, 7, 3, 60);
+      const seconds = clampInt(data?.seconds, 5, 3, 60);
       room.setAutoPick(enabled, seconds);
       broadcast(io, room);
     });

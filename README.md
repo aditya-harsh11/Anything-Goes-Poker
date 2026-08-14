@@ -1,4 +1,4 @@
-# Anything Goes Poker
+# Play Poker
 
 A self-hosted real-time multiplayer poker room for home games. One host
 opens a game, shares a link, and up to eight friends pile in. Between every
@@ -57,6 +57,7 @@ UI smoke (Playwright, needs `npx playwright install chromium`):
 | Crazy Pineapple | 5 | Discard 1 after flop, turn, river — down to 2 at showdown |
 | Bomb Pot (Hold'em / Omaha) | 2 / 4 | Ante, no preflop, two boards, pot split per board |
 | Blackjack Hold'em | 4 | 2 for poker + 2 for blackjack; pot split 50/50 |
+| Number | 5 | Pick 3 (in order) to build a number vs. the dealer's target + 2 for poker; pot split 50/50 |
 
 **You pick your own cards.** In every variant where there's a choice
 (Omaha, 2-or-3, etc.) the engine does *not* auto-pick your best combination

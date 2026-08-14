@@ -22,6 +22,7 @@ import {
 } from './handEvaluator';
 import { buildPots, type Contribution } from './sidePots';
 import { evaluateBlackjack, blackjackWinners, type BlackjackHand } from './blackjack';
+import { tripleNineValue, bestTripleNineSelection } from './tripleNine';
 
 /** Fixed ante posted by every player in a bomb pot. */
 const BOMB_ANTE = 50;
@@ -53,6 +54,8 @@ export class PokerGame {
   board: Card[] = [];
   /** Bomb pots: the second board. */
   board2: Card[] = [];
+  /** Number (Triple 9): this hand's dealer-set target (0-999), or null outside this variant. */
+  tripleNineTarget: number | null = null;
   handNumber: number;
   lastResult: HandResult | null = null;
   smallBlindSeat = -1;
@@ -92,6 +95,7 @@ export class PokerGame {
     buttonIndex: number,
     handNumber: number,
     variant: VariantConfig,
+    tripleNineTarget?: number,
   ) {
     this.seats = participants;
     this.buttonIndex = buttonIndex;
@@ -100,6 +104,7 @@ export class PokerGame {
     this.minRaise = opts.bigBlind;
     this.handNumber = handNumber;
     this.variant = variant;
+    this.tripleNineTarget = variant.tripleNine ? (tripleNineTarget ?? 0) : null;
 
     for (const p of this.seats) {
       p.status = 'active';
@@ -352,6 +357,7 @@ export class PokerGame {
       phase: this.phase,
       communityCards: this.board,
       communityCards2: this.board2,
+      tripleNineTarget: this.tripleNineTarget,
       pots,
       totalPot: this.potTotal(),
       currentBet: this.currentBet,
@@ -755,6 +761,20 @@ export class PokerGame {
     if (!p || p.status === 'folded') return { ok: false, error: 'not in the hand' };
     if (this.selections.has(playerId)) return { ok: false, error: 'already selected' };
 
+    if (this.variant.tripleNine) {
+      // `indices` are the 3 cards chosen for the number, in digit order (hundreds,
+      // tens, ones) — order matters here, unlike every other variant's selection, so
+      // it's deliberately NOT sorted. The other 2 cards automatically play poker.
+      const need = this.variant.holeCards - Math.max(...this.variant.allowedHoleCounts);
+      const valid = [...new Set(indices)].filter((i) => Number.isInteger(i) && i >= 0 && i < p.holeCards.length);
+      if (valid.length !== need) {
+        return { ok: false, error: `pick exactly ${need} cards, in order, for the number` };
+      }
+      this.selections.set(playerId, valid);
+      this.maybeResolveSelections();
+      return { ok: true };
+    }
+
     const valid = [...new Set(indices)]
       .filter((i) => Number.isInteger(i) && i >= 0 && i < p.holeCards.length)
       .sort((a, b) => a - b);
@@ -807,6 +827,15 @@ export class PokerGame {
     }
     if (!this.awaitingSelection) return;
     const counts = this.variant.allowedHoleCounts;
+    if (this.variant.tripleNine) {
+      for (const p of this.contenders()) {
+        if (!this.selections.has(p.id)) {
+          this.selections.set(p.id, bestTripleNineSelection(p.holeCards, this.tripleNineTarget ?? 0).indices);
+        }
+      }
+      this.resolveSelectedShowdown();
+      return;
+    }
     if (this.variant.bombPot) {
       // Auto-pick the best legal cards per board for anyone who hasn't chosen.
       for (const p of this.contenders()) {
@@ -839,6 +868,10 @@ export class PokerGame {
     this.awaitingSelection = false;
     if (this.variant.blackjack) {
       this.resolveBlackjackShowdown();
+      return;
+    }
+    if (this.variant.tripleNine) {
+      this.resolveTripleNineShowdown();
       return;
     }
     const contenders = this.contenders();
@@ -1009,6 +1042,109 @@ export class PokerGame {
       .filter((e): e is { id: string; hand: BlackjackHand } => !!e.hand);
     const winnerIds = blackjackWinners(entries);
     if (winnerIds.length === 0) return;
+    const ordered = this.orderByPosition(winnerIds);
+    const base = Math.floor(amount / ordered.length);
+    let remainder = amount - base * ordered.length;
+    for (const id of ordered) {
+      let share = base;
+      if (remainder > 0) {
+        share += 1;
+        remainder -= 1;
+      }
+      out.set(id, (out.get(id) ?? 0) + share);
+    }
+  }
+
+  /** Number (Triple 9): split each pot between the best poker hand (leftover 2 cards) and
+   *  whoever's 3-card number (in their chosen order) lands closest to the dealer's target. */
+  private resolveTripleNineShowdown(): void {
+    const contenders = this.contenders();
+    const pokerSolved = new Map<string, SolvedHand>();
+    const numberByPlayer = new Map<string, number>();
+    const target = this.tripleNineTarget ?? 0;
+    for (const p of contenders) {
+      const numIdx = this.selections.get(p.id) ?? bestTripleNineSelection(p.holeCards, target).indices;
+      const pokerIdx = p.holeCards.map((_, i) => i).filter((i) => !numIdx.includes(i));
+      const pokerHand = handFromSelection(p.holeCards, pokerIdx, this.board);
+      const value = tripleNineValue(numIdx.map((i) => p.holeCards[i]));
+      pokerSolved.set(p.id, { id: p.id, hand: pokerHand });
+      numberByPlayer.set(p.id, value);
+      p.handName = `${describe(pokerHand)} · No ${String(value).padStart(3, '0')}`;
+    }
+
+    const contribs: Contribution[] = this.seats.map((p) => ({
+      id: p.id,
+      amount: p.totalCommitted,
+      folded: p.status === 'folded',
+    }));
+    const pots = buildPots(contribs);
+
+    const winsPoker = new Map<string, number>();
+    const winsNumber = new Map<string, number>();
+    for (const pot of pots) {
+      const halfPoker = Math.ceil(pot.amount / 2); // odd chip to the poker half
+      const halfNumber = pot.amount - halfPoker;
+      this.awardBombHalf(pot.eligible, pokerSolved, halfPoker, winsPoker);
+      this.awardTripleNineHalf(pot.eligible, numberByPlayer, target, halfNumber, winsNumber);
+    }
+
+    const apply = (m: Map<string, number>) => {
+      for (const [id, amt] of m) {
+        const p = this.seats.find((s) => s.id === id);
+        if (p) p.stack += amt;
+      }
+    };
+    apply(winsPoker);
+    apply(winsNumber);
+
+    const nameOf = (id: string) => this.seats.find((s) => s.id === id)?.name ?? '';
+    const pokerHandFor = (id: string) => {
+      const s = pokerSolved.get(id);
+      return s ? describe(s.hand) : undefined;
+    };
+    const numberFor = (id: string) => {
+      const v = numberByPlayer.get(id);
+      return v != null ? String(v).padStart(3, '0') : undefined;
+    };
+    const winners: HandResult['winners'] = [
+      ...[...winsPoker.entries()].map(([id, amount]) => ({
+        playerId: id,
+        name: nameOf(id),
+        amount,
+        label: 'Poker',
+        handName: pokerHandFor(id),
+      })),
+      ...[...winsNumber.entries()].map(([id, amount]) => ({
+        playerId: id,
+        name: nameOf(id),
+        amount,
+        label: 'Number',
+        handName: numberFor(id),
+      })),
+    ];
+
+    this.phase = 'showdown';
+    this.toActIndex = null;
+    this.complete = true;
+    this.revealAllContenders();
+    this.lastResult = { handNumber: this.handNumber, board: this.board, winners, revealed: [] };
+  }
+
+  private awardTripleNineHalf(
+    eligibleIds: string[],
+    numberByPlayer: Map<string, number>,
+    target: number,
+    amount: number,
+    out: Map<string, number>,
+  ): void {
+    if (amount <= 0) return;
+    const entries = eligibleIds
+      .map((id) => ({ id, value: numberByPlayer.get(id) }))
+      .filter((e): e is { id: string; value: number } => e.value != null)
+      .map((e) => ({ id: e.id, diff: Math.abs(e.value - target) }));
+    if (entries.length === 0) return;
+    const best = Math.min(...entries.map((e) => e.diff));
+    const winnerIds = entries.filter((e) => e.diff === best).map((e) => e.id);
     const ordered = this.orderByPosition(winnerIds);
     const base = Math.floor(amount / ordered.length);
     let remainder = amount - base * ordered.length;

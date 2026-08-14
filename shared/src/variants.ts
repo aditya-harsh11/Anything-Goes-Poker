@@ -9,7 +9,8 @@ export type Variant =
   | 'crazy-pineapple'
   | 'bomb-holdem'
   | 'bomb-omaha'
-  | 'blackjack-holdem';
+  | 'blackjack-holdem'
+  | 'triple9';
 
 export interface VariantConfig {
   id: Variant;
@@ -27,6 +28,8 @@ export interface VariantConfig {
   bombPot: boolean;
   /** Blackjack Hold'em: split 4 cards into 2 for poker + 2 for blackjack; pot split 50/50. */
   blackjack: boolean;
+  /** Number (Triple 9): split 5 cards into 3 (ordered, forming a number) + 2 for poker; pot split 50/50. */
+  tripleNine: boolean;
   bettingStructure: 'no-limit' | 'pot-limit';
 }
 
@@ -41,6 +44,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   plo: {
@@ -53,6 +57,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'pot-limit',
   },
   'dirty-omaha': {
@@ -65,6 +70,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'two-or-three': {
@@ -77,6 +83,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'all-five': {
@@ -89,6 +96,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'one-three-five': {
@@ -101,6 +109,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   pineapple: {
@@ -113,30 +122,33 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [1],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'crazy-pineapple': {
     id: 'crazy-pineapple',
     name: 'Crazy Pineapple',
-    description: '5 hole cards. Discard 1 after the flop, the turn, and the river — down to 2.',
+    description: '5 hole cards. Discard 1 after the flop, the turn, and the river, down to 2.',
     holeCards: 5,
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
     discardSchedule: [1, 1, 1],
     bombPot: false,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'bomb-holdem': {
     id: 'bomb-holdem',
     name: 'Bomb Pot (Hold’em)',
-    description: 'Everyone antes, no preflop, two boards. Pot splits per board — scoop both to win it all.',
+    description: 'Everyone antes, no preflop, two boards. Pot splits per board, scoop both to win it all.',
     holeCards: 2,
     allowedHoleCounts: [0, 1, 2],
     manualSelect: false,
     discardSchedule: [],
     bombPot: true,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'bomb-omaha': {
@@ -149,6 +161,7 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: true,
     blackjack: false,
+    tripleNine: false,
     bettingStructure: 'no-limit',
   },
   'blackjack-holdem': {
@@ -161,18 +174,41 @@ export const VARIANTS: Record<Variant, VariantConfig> = {
     discardSchedule: [],
     bombPot: false,
     blackjack: true,
+    tripleNine: false,
+    bettingStructure: 'no-limit',
+  },
+  triple9: {
+    id: 'triple9',
+    name: 'Number',
+    description: "5 hole cards. Pick 3 (in order) for a number vs. the dealer's target; other 2 for poker. Pot splits 50/50.",
+    holeCards: 5,
+    allowedHoleCounts: [2],
+    manualSelect: true,
+    discardSchedule: [],
+    bombPot: false,
+    blackjack: false,
+    tripleNine: true,
     bettingStructure: 'no-limit',
   },
 };
 
-// Texas first, Omaha (PLO) second, then the rest alphabetical by name.
-export const VARIANT_LIST: VariantConfig[] = [
-  VARIANTS.texas,
-  VARIANTS.plo,
-  ...Object.values(VARIANTS)
-    .filter((v) => v.id !== 'texas' && v.id !== 'plo')
-    .sort((a, b) => a.name.localeCompare(b.name)),
+// Fixed display order for the "Choose the game" picker (host-curated, not alphabetical).
+const VARIANT_ORDER: Variant[] = [
+  'texas',
+  'plo',
+  'dirty-omaha',
+  'bomb-holdem',
+  'bomb-omaha',
+  'one-three-five',
+  'two-or-three',
+  'triple9',
+  'blackjack-holdem',
+  'pineapple',
+  'crazy-pineapple',
+  'all-five',
 ];
+
+export const VARIANT_LIST: VariantConfig[] = VARIANT_ORDER.map((id) => VARIANTS[id]);
 
 /** Human-readable hint describing how many cards must be selected. */
 export function selectionHint(counts: number[]): string {
@@ -183,5 +219,5 @@ export function selectionHint(counts: number[]): string {
     sorted.length === 1
       ? `exactly ${sorted[0]}`
       : `${sorted.slice(0, -1).join(', ')} or ${sorted[sorted.length - 1]}`;
-  return canBoard ? `${list} (or none — play the board)` : list;
+  return canBoard ? `${list} (or none, play the board)` : list;
 }

@@ -68,11 +68,20 @@ export class Room {
   pendingDealerId: string | null = null;
 
   /**
+   * Number (Triple 9) only: once the dealer picks 'triple9', dealing pauses one more
+   * beat for them to also lock in this hand's target number (0-999) — awaitingDealerPick
+   * stays true throughout so the pending dealer stays locked and cancellation/auto-pick
+   * keep working unchanged.
+   */
+  awaitingTripleNineTarget = false;
+  private pendingTripleNineTarget: number | null = null;
+
+  /**
    * Auto-start: when enabled, the room arms a timer the moment a hand ends and, when it
    * fires, auto-triggers `startHand()` (the dealer still picks the variant). Disabled by
    * default — the host toggles it via `setAutoStart`.
    */
-  autoStart: { enabled: boolean; seconds: number } = { enabled: false, seconds: 7 };
+  autoStart: { enabled: boolean; seconds: number } = { enabled: false, seconds: 5 };
   private autoStartTimer: ReturnType<typeof setTimeout> | null = null;
   private autoStartAt: number | null = null;
 
@@ -81,7 +90,7 @@ export class Room {
    * `seconds`, the server picks the current/last variant for them and deals. Disabled by
    * default — the host toggles it via `setAutoPick`.
    */
-  autoPick: { enabled: boolean; seconds: number } = { enabled: false, seconds: 7 };
+  autoPick: { enabled: boolean; seconds: number } = { enabled: false, seconds: 5 };
   private autoPickTimer: ReturnType<typeof setTimeout> | null = null;
   private autoPickAt: number | null = null;
 
@@ -210,24 +219,33 @@ export class Room {
     p.status = out ? 'sittingout' : 'seated';
   }
 
+  /**
+   * Host chip tools (`adjustStack` / `setStack`) represent cash moving in or out of the
+   * game, not gameplay results — actual wins/losses only ever move `stack` (inside
+   * `PokerGame`, during a hand) and never touch `totalBoughtIn`. So any host-driven stack
+   * change here moves `totalBoughtIn` by the same amount in both directions: buying a
+   * player in raises both figures together (net unaffected), and undoing/correcting a
+   * stack — e.g. a mistaken "+buy-in" set back down — lowers both together too, instead
+   * of reading as a real loss (`netResult = stack - totalBoughtIn` would otherwise go
+   * negative for a correction that was never actually lost at the table).
+   */
   adjustStack(playerId: string, delta: number): void {
     const p = this.players.get(playerId);
     if (!p) return;
-    p.stack = Math.max(0, p.stack + delta);
-    if (delta > 0) {
-      p.totalBoughtIn += delta;
-      p.rebuys += 1;
-    }
+    const newStack = Math.max(0, p.stack + delta);
+    const applied = newStack - p.stack;
+    p.totalBoughtIn = Math.max(0, p.totalBoughtIn + applied);
+    if (applied > 0) p.rebuys += 1;
+    p.stack = newStack;
   }
 
   setStack(playerId: string, value: number): void {
     const p = this.players.get(playerId);
     if (!p) return;
     const v = Math.max(0, Math.floor(value));
-    if (v > p.stack) {
-      p.totalBoughtIn += v - p.stack;
-      p.rebuys += 1;
-    }
+    const delta = v - p.stack;
+    p.totalBoughtIn = Math.max(0, p.totalBoughtIn + delta);
+    if (delta > 0) p.rebuys += 1;
     p.stack = v;
   }
 
@@ -249,13 +267,32 @@ export class Room {
   /**
    * Dealer locks in the variant for the upcoming hand. Only valid while
    * `awaitingDealerPick` is true and only callable by the pending dealer. On success
-   * this also immediately deals the hand — picking the variant IS the deal action.
+   * this also immediately deals the hand — picking the variant IS the deal action —
+   * except for Number (Triple 9), which needs one more input (the target) first.
    */
   setVariantAndDeal(playerId: string, variant: string): { ok: boolean; error?: string } {
     if (!this.awaitingDealerPick) return { ok: false, error: 'no variant selection in progress' };
     if (playerId !== this.pendingDealerId) return { ok: false, error: 'only the dealer can pick the game' };
     if (!(variant in VARIANTS)) return { ok: false, error: 'unknown variant' };
     this.settings = { ...this.settings, variant: variant as Variant };
+    if (VARIANTS[variant as Variant].tripleNine) {
+      this.awaitingTripleNineTarget = true;
+      return { ok: true };
+    }
+    return this.dealHand();
+  }
+
+  /**
+   * Number (Triple 9): the dealer locks in this hand's target (0-999) — the last input
+   * needed before dealing. Only valid while `awaitingTripleNineTarget` is true and only
+   * callable by the pending dealer.
+   */
+  setTripleNineTargetAndDeal(playerId: string, n: number): { ok: boolean; error?: string } {
+    if (!this.awaitingTripleNineTarget) return { ok: false, error: 'no target number expected' };
+    if (playerId !== this.pendingDealerId) return { ok: false, error: 'only the dealer can set the number' };
+    if (!Number.isFinite(n)) return { ok: false, error: 'invalid number' };
+    this.pendingTripleNineTarget = Math.max(0, Math.min(999, Math.floor(n)));
+    this.awaitingTripleNineTarget = false;
     return this.dealHand();
   }
 
@@ -312,6 +349,8 @@ export class Room {
   cancelSelection(): void {
     this.awaitingDealerPick = false;
     this.pendingDealerId = null;
+    this.awaitingTripleNineTarget = false;
+    this.pendingTripleNineTarget = null;
     this.clearAutoPickTimer();
   }
 
@@ -319,7 +358,7 @@ export class Room {
 
   /** Host enables/disables auto-start and sets the post-hand delay (clamped 3..60s). */
   setAutoStart(enabled: boolean, seconds: number): void {
-    const secs = Math.max(3, Math.min(60, Math.floor(seconds) || 7));
+    const secs = Math.max(3, Math.min(60, Math.floor(seconds) || 5));
     this.autoStart = { enabled, seconds: secs };
     if (!enabled) {
       this.clearAutoStartTimer();
@@ -364,7 +403,7 @@ export class Room {
 
   /** Host enables/disables auto-pick and sets how long to wait on the dealer (3..60s). */
   setAutoPick(enabled: boolean, seconds: number): void {
-    const secs = Math.max(3, Math.min(60, Math.floor(seconds) || 7));
+    const secs = Math.max(3, Math.min(60, Math.floor(seconds) || 5));
     this.autoPick = { enabled, seconds: secs };
     this.clearAutoPickTimer();
     // If we're already waiting on a dealer, (re)arm the countdown with the new delay.
@@ -394,9 +433,15 @@ export class Room {
       this.autoPickAt = null;
       if (!this.autoPick.enabled || !this.awaitingDealerPick) return;
       // Pick a random variant on the dealer's behalf, then deal (dealHand reads settings.variant).
+      // Bypasses any Triple 9 number the dealer may have been mid-entry on, same as it
+      // bypasses every other in-progress human choice.
       const keys = Object.keys(VARIANTS) as Variant[];
       const choice = keys[Math.floor(Math.random() * keys.length)];
       this.settings = { ...this.settings, variant: choice };
+      this.awaitingTripleNineTarget = false;
+      if (VARIANTS[choice].tripleNine) {
+        this.pendingTripleNineTarget = Math.floor(Math.random() * 1000);
+      }
       this.dealHand();
       this.onAutoAdvance?.();
     }, ms);
@@ -430,15 +475,19 @@ export class Room {
       p.shownCards = [];
       p.handName = undefined;
     }
+    const variantConfig = VARIANTS[this.settings.variant];
     this.game = new PokerGame(
       participants,
       { smallBlind: this.settings.smallBlind, bigBlind: this.settings.bigBlind },
       buttonIdx,
       this.handNumber,
-      VARIANTS[this.settings.variant],
+      variantConfig,
+      variantConfig.tripleNine ? (this.pendingTripleNineTarget ?? 0) : undefined,
     );
     this.awaitingDealerPick = false;
     this.pendingDealerId = null;
+    this.awaitingTripleNineTarget = false;
+    this.pendingTripleNineTarget = null;
     this.clearAutoPickTimer();
     this.maybeFinalize();
     return { ok: true };
@@ -561,6 +610,7 @@ export class Room {
       phase: 'waiting',
       communityCards: [],
       communityCards2: [],
+      tripleNineTarget: null,
       pots: [],
       totalPot: 0,
       currentBet: 0,
@@ -645,6 +695,7 @@ export class Room {
       nextDealerId,
       youAreDealer: !!nextDealerId && nextDealerId === viewerId,
       awaitingDealerPick: this.awaitingDealerPick,
+      awaitingTripleNineTarget: this.awaitingTripleNineTarget,
       autoStart: this.autoStart,
       autoStartAt: this.autoStartAt,
       autoPick: this.autoPick,

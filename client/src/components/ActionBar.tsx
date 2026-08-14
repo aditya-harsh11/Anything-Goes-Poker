@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { RoomState, PlayerAction } from '@poker/shared';
+import NumberField from './NumberField';
 
 interface Props {
   state: RoomState;
@@ -72,12 +73,11 @@ export default function ActionBar({ state, onAct }: Props) {
             onChange={(e) => setRaiseTo(Number(e.target.value))}
             className="h-2 w-full cursor-pointer accent-[#c9a66b] sm:min-w-[12rem] sm:flex-1"
           />
-          <input
-            type="number"
+          <NumberField
             min={av.minRaiseTo}
             max={av.maxRaiseTo}
             value={raiseTo}
-            onChange={(e) => setRaiseTo(Number(e.target.value))}
+            onChange={setRaiseTo}
             onBlur={() => setRaiseTo(clamp(raiseTo))}
             className="w-24 rounded-lg border border-brass/30 bg-black/40 px-2 py-1.5 text-center font-mono text-lg font-bold text-ink outline-none focus:border-brass/60"
           />

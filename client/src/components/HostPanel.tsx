@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { type RoomState } from '@poker/shared';
 import { api } from '../lib/api';
 import { useCountdown } from '../lib/useCountdown';
+import NumberField from './NumberField';
 
 interface Props {
   state: RoomState;
@@ -109,13 +110,12 @@ export default function HostPanel({ state }: Props) {
               />
             </label>
             <div className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-dim">
-              <input
-                type="number"
+              <NumberField
                 min={3}
                 max={60}
                 value={autoSecs}
-                onChange={(e) => {
-                  const v = Math.max(3, Math.min(60, Math.floor(Number(e.target.value)) || 0));
+                onChange={(n) => {
+                  const v = Math.max(3, Math.min(60, Math.floor(n) || 0));
                   setAutoSecs(v);
                   if (state.autoStart.enabled) api.setAutoStart(true, v);
                 }}
@@ -139,13 +139,12 @@ export default function HostPanel({ state }: Props) {
               />
             </label>
             <div className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-dim">
-              <input
-                type="number"
+              <NumberField
                 min={3}
                 max={60}
                 value={pickSecs}
-                onChange={(e) => {
-                  const v = Math.max(3, Math.min(60, Math.floor(Number(e.target.value)) || 0));
+                onChange={(n) => {
+                  const v = Math.max(3, Math.min(60, Math.floor(n) || 0));
                   setPickSecs(v);
                   if (state.autoPick.enabled) api.setAutoPick(true, v);
                 }}

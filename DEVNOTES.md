@@ -1,4 +1,4 @@
-# Anything Goes Poker — Dev Notes
+# Play Poker — Dev Notes
 
 Working reference for the codebase: how it's put together, the non-obvious bits, and how to
 run/extend it. (User-facing intro is in `README.md`; deploying is in `DEPLOY.md`.)
@@ -97,6 +97,15 @@ Check/Fold bar appeared over the discard prompt and corrupted the round.)
     best per board.
 - **Blackjack Hold'em**: assign 2 cards to poker + 2 to blackjack; pot split 50/50
   (`resolveBlackjackShowdown`).
+- **Number** (id `triple9`, 5 hole cards): assign 3 cards, **in order**, to a number vs. the dealer's
+  target + 2 to poker; pot split 50/50 (`resolveTripleNineShowdown`). Card→digit: 2-9 = 2-9,
+  T/J/Q/K = 0, A = 1 (`engine/tripleNine.ts`). The dealer sets the hand's target (0-999) as a *second*
+  step after picking the variant — `Room.awaitingTripleNineTarget` (dealer stays locked via the same
+  `pendingDealerId`, `awaitingDealerPick` stays true throughout) until `setTripleNineTargetAndDeal`
+  fires, which deals. Unlike every other selection, `submitSelection`'s indices are **not sorted** for
+  this variant — order is the digit order (hundreds→tens→ones), preserved end to end from the client's
+  tap sequence through to `PokerGame.selections`. Auto-pick (dealer stalls past the timer) bypasses the
+  number step too, same as it bypasses every other human choice — it rolls a random 0-999 target.
 - **Fold-win**: `endHandByFold` (no reveal).
 - **Reveal order at showdown** (`applyShowdownReveals`, used by `awardFromSolved`): standard card-room
   order — the **last aggressor** on the final street shows first (or the **first live player left of
@@ -115,14 +124,14 @@ discards down to target, then opens betting. Pineapple = `[1]` (3→2); Crazy Pi
 (5→2). Host "Force discard" / `forceResolve` auto-discards if someone stalls.
 
 ## Variant system
-All variants are data in `shared/src/variants.ts` (`VARIANTS` record + `VARIANT_LIST`, ordered Texas,
-PLO, then alphabetical). A `VariantConfig`: `holeCards`, `allowedHoleCounts`, `manualSelect`,
-`discardSchedule`, `bombPot`, `blackjack`, `bettingStructure`.
+All variants are data in `shared/src/variants.ts` (`VARIANTS` record + `VARIANT_LIST`, a fixed
+host-curated display order — not alphabetical). A `VariantConfig`: `holeCards`, `allowedHoleCounts`,
+`manualSelect`, `discardSchedule`, `bombPot`, `blackjack`, `tripleNine`, `bettingStructure`.
 
-**To add a variant:** add an entry to `VARIANTS` (and the `Variant` union). The engine reads the
-config — most variants need no engine changes. Only genuinely new mechanics (a new pot structure,
-new eval) need code in `pokerGame.ts`. The picker modal (`VariantPicker`) is generated from
-`VARIANT_LIST`.
+**To add a variant:** add an entry to `VARIANTS` (and the `Variant` union + `VARIANT_ORDER`). The
+engine reads the config — most variants need no engine changes. Only genuinely new mechanics (a new
+pot structure, new eval) need code in `pokerGame.ts`. The picker modal (`VariantPicker`) is generated
+from `VARIANT_LIST`, in `VARIANT_ORDER`'s order.
 
 **Dealer's choice (per-hand variant):** the **upcoming dealer picks the game; the host deals.**
 `Room.nextDealerId()` computes who's on the button next (mirrors `startHand`'s button logic) and the
@@ -147,15 +156,30 @@ shows these between hands: dealer sees "Your deal — pick the game" + Change ga
   of a stale, dead UI. "Session not found" (room alive, you were removed) → the join screen.
 - `components/Table.tsx` — oval table; seats positioned by angle, rotated so **you** sit at the
   bottom. Rendered at a fixed design size (`DESIGN_W=1150`) and **scaled to fill the container width**
-  via a ResizeObserver (cap `MAX_SCALE=1.25`; no blank side gutters), shrinking on phones. Seat radius
-  is tightened so side pods don't clip. Only face-up cards render (no backs); your own cards dock in
-  your pod. A small **recycle icon + count** by a name shows that player's `rebuys`.
+  via a ResizeObserver (cap `MAX_SCALE=1.25`; no blank side gutters), shrinking on phones. Seat pods
+  sit outside the felt on an ellipse and can stick out past the design canvas at the horizontal/
+  vertical extremes (e.g. the leftmost/rightmost seat at 8 players) — `bleedMargin()` reserves exactly
+  enough canvas before fitting so pods never get clipped by the wrap's `overflow-hidden` (the side next
+  to the action rail used to read as "covered by the sidebar"). Only face-up cards render (no backs);
+  your own cards dock in your pod. A small **recycle icon + count** by a name shows that player's
+  `rebuys`. Shows the Number variant's target (`game.tripleNineTarget`) above the board when set.
 - `components/PlayingCard.tsx` — `xs/sm/md/lg` sizes (bumped larger this round; `lg` = board).
-- `components/VariantPicker.tsx` — modal listing **every** variant + rules (dealer's "Change game");
-  closes on Close / backdrop / Esc.
-- `pages/GameRoom.tsx` panels: `TableStatus` (dealer picks / host deals, between hands),
-  `ChooseTray` (discard / single-board select) + `BombSelectTray` (two-board Omaha select),
-  `ShowHandControls` ("Show your hand" — works even if you folded/lost), `ActionBar`.
+- `components/VariantPicker.tsx` — modal listing **every** variant + rules, in `VARIANT_LIST`'s fixed
+  order (dealer's "Change game"); closes on Close / backdrop / Esc.
+- `components/NumberField.tsx` — drop-in replacement for `<input type="number">` bound to numeric
+  state. Plain `value={n} onChange={... Number(e.target.value)}` snaps a cleared field to `0`
+  immediately, so it never actually goes empty — the next digit types in *after* that leftover zero
+  ("7" cleared then "3" typed → "03"). This tracks its own text buffer instead, only committing valid
+  numbers upward, and only re-syncs to the external value on blur. Used everywhere a numeric input
+  binds to numeric state (Home's settings, ActionBar's raise box, HostPanel's auto-timer seconds, the
+  Number target picker).
+- `pages/GameRoom.tsx` panels: `TableStatus` (dealer picks / host deals / Number's target-pick wait,
+  between hands), `ChooseTray` (discard / single-board select) + `BombSelectTray` (two-board Omaha
+  select) + `TripleNineTray` (Number's ordered 3-card picker — order forms the digits, so picks are
+  tracked as an array, not a set), `TripleNinePicker` (dealer's target-number entry, shown once they
+  pick Number — mirrors `VariantPicker`'s forced/non-dismissable pattern), `ShowHandControls` ("Show
+  your hand" — works even if you folded/lost), `ActionBar`. `SettleUp` ("End game", host-only) computes
+  a minimal set of payments from `netResult` (`lib/settle.ts`) so the table can cash out.
 - `components/Dropdown.tsx` — themed dropdown (now unused after the picker moved to the modal; kept as
   a reusable component).
 - UI theme = "Midnight Card Room": Fraunces (display) / Outfit (body) / Space Mono (numbers); design

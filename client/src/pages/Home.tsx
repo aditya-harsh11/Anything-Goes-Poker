@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { RoomSettings } from '@poker/shared';
 import { createRoom } from '../lib/api';
 import { saveSession } from '../lib/session';
+import NumberField from '../components/NumberField';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function Home() {
           <span className="text-crimson">♦</span>
           <span>♣</span>
         </div>
-        <h1 className="font-display text-5xl font-semibold leading-none text-ink">Anything Goes Poker</h1>
+        <h1 className="font-display text-5xl font-semibold leading-none text-ink">Play Poker</h1>
         <p className="mt-3 text-sm text-ink-dim">
           A private table for your home game. Play-chips only.
         </p>
@@ -69,44 +70,19 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={label}>Small blind</label>
-            <input
-              type="number"
-              min={1}
-              className="field"
-              value={smallBlind}
-              onChange={(e) => setSmallBlind(Number(e.target.value))}
-            />
+            <NumberField min={1} className="field" value={smallBlind} onChange={setSmallBlind} />
           </div>
           <div>
             <label className={label}>Big blind</label>
-            <input
-              type="number"
-              min={1}
-              className="field"
-              value={bigBlind}
-              onChange={(e) => setBigBlind(Number(e.target.value))}
-            />
+            <NumberField min={1} className="field" value={bigBlind} onChange={setBigBlind} />
           </div>
           <div>
             <label className={label}>Starting stack</label>
-            <input
-              type="number"
-              min={1}
-              className="field"
-              value={startingStack}
-              onChange={(e) => setStartingStack(Number(e.target.value))}
-            />
+            <NumberField min={1} className="field" value={startingStack} onChange={setStartingStack} />
           </div>
           <div>
             <label className={label}>Max seats</label>
-            <input
-              type="number"
-              min={2}
-              max={8}
-              className="field"
-              value={maxSeats}
-              onChange={(e) => setMaxSeats(Number(e.target.value))}
-            />
+            <NumberField min={2} max={8} className="field" value={maxSeats} onChange={setMaxSeats} />
           </div>
         </div>
         <button disabled={busy} className="btn btn-gold mt-2 py-3 text-base">

@@ -1,4 +1,4 @@
-# Deploying Anything Goes Poker
+# Deploying Play Poker
 
 The catch: the server is a **long-lived Socket.IO (WebSocket) process that holds game
 state in memory**. That rules out Vercel/Netlify *for the server* — their serverless

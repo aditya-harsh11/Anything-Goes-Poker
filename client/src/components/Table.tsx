@@ -240,6 +240,14 @@ export default function Table({ state }: Props) {
         <div className="felt absolute inset-[7%] rounded-full" />
 
         <div className="absolute left-1/2 top-1/2 flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2">
+          {game.tripleNineTarget != null && (
+            <div className="mb-1 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 ring-1 ring-brass/40">
+              <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-ink/70">Target</span>
+              <span className="font-mono text-lg font-bold text-brass-bright">
+                {String(game.tripleNineTarget).padStart(3, '0')}
+              </span>
+            </div>
+          )}
           {game.communityCards2.length > 0 && (
             <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-ink/70">Board A</span>
           )}

@@ -37,6 +37,7 @@ export const api = {
   setStack: (playerId: string, value: number) => socket.emit('hostSetStack', { playerId, value }),
   removePlayer: (playerId: string) => socket.emit('hostRemovePlayer', playerId),
   setVariant: (variant: Variant) => socket.emit('hostSetVariant', variant),
+  setTripleNineNumber: (n: number) => socket.emit('hostSetTripleNineNumber', n),
   shuffleSeats: () => socket.emit('hostShuffleSeats'),
   setAutoStart: (enabled: boolean, seconds: number) =>
     socket.emit('hostSetAutoStart', { enabled, seconds }),

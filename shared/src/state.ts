@@ -78,6 +78,8 @@ export interface PublicGameState {
   communityCards: Card[];
   /** Bomb pots: the second board (otherwise empty). */
   communityCards2: Card[];
+  /** Number (Triple 9): this hand's dealer-set target (0-999), or null outside this variant. */
+  tripleNineTarget: number | null;
   pots: PotInfo[];
   totalPot: number;
   /** Highest committedThisRound among players — the amount to match. */
@@ -139,6 +141,11 @@ export interface RoomState {
    * the server immediately deals the hand and clears this flag.
    */
   awaitingDealerPick: boolean;
+  /**
+   * Number (Triple 9) only: true between the dealer picking the variant and locking in
+   * this hand's target number. The deal is blocked on it, same as awaitingDealerPick.
+   */
+  awaitingTripleNineTarget: boolean;
   /** Host-configurable auto-start: when on, the next hand auto-begins after a hand ends. */
   autoStart: AutoActionSettings;
   /**
