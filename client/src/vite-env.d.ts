@@ -8,3 +8,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  /** Loaded async by the GoatCounter <script> tag in index.html; may not be ready yet. */
+  goatcounter?: {
+    count: (opts?: { path?: string; title?: string; referrer?: string; event?: boolean }) => void;
+  };
+}
