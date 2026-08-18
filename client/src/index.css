@@ -8,7 +8,6 @@
 
   --color-ink: #ece6d6; /* warm ivory */
   --color-ink-dim: #9c9486;
-  --color-base: #0a0c0a;
   --color-brass: #c9a66b;
   --color-brass-bright: #e7cf9a;
   --color-felt: #1c7a52;
@@ -206,6 +205,15 @@ textarea {
 .field:focus {
   border-color: rgba(231, 207, 154, 0.7);
   box-shadow: 0 0 0 3px rgba(201, 166, 107, 0.18);
+}
+/* Hide the up/down spinner on number inputs across browsers. */
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* ---- Page-load reveal ----------------------------------------------------- */
