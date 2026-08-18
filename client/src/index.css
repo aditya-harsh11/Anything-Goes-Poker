@@ -60,6 +60,26 @@ body::after {
   background: rgba(201, 166, 107, 0.35);
 }
 
+/* This is a table felt, not a document — nothing here is meant to be selected/copied
+   except the room-code chip (.select-all) and actual text inputs. Also kills the
+   iOS long-press "copy/lookup" callout so a long-press on a card/seat doesn't pop a menu. */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+.select-all {
+  user-select: all;
+  -webkit-user-select: all;
+  -webkit-touch-callout: default;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
