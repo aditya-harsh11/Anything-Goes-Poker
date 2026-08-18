@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SUIT_SYMBOL, VARIANTS, selectionHint, type Card, type RoomState } from '@poker/shared';
+import { SUIT_SYMBOL, VARIANTS, VARIANT_LIST, selectionHint, type Card, type RoomState } from '@poker/shared';
 import { socket } from '../lib/socket';
 import { useRoom } from '../lib/useRoom';
 import { useCountdown } from '../lib/useCountdown';
@@ -735,31 +735,52 @@ export default function GameRoom() {
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <h1 className="font-display text-xl font-semibold text-brass-bright sm:text-2xl">Play Poker</h1>
+          <span className="flex items-center gap-1 rounded-md bg-brass/15 px-2 py-0.5 text-xs font-semibold text-brass-bright ring-1 ring-brass/30 sm:px-2.5 sm:py-1 sm:text-sm">
+            {VARIANTS[state.settings.variant].name}
+          </span>
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowVariantInfo((v) => !v)}
-              className="flex items-center gap-1 rounded-md bg-brass/15 px-2 py-0.5 text-xs font-semibold text-brass-bright ring-1 ring-brass/30 transition hover:bg-brass/25 sm:px-2.5 sm:py-1 sm:text-sm md:cursor-default md:hover:bg-brass/15"
-              aria-label="Show game rules"
+              className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-brass-bright ring-1 ring-brass/30 transition hover:bg-brass/15"
+              aria-label="Game modes"
             >
-              {VARIANTS[state.settings.variant].name}
-              <span className="text-xs font-bold text-brass-bright md:hidden">ⓘ</span>
+              ⓘ
             </button>
             {showVariantInfo && (
               <>
-                <div className="fixed inset-0 z-[70] md:hidden" onClick={() => setShowVariantInfo(false)} />
-                <div className="panel absolute left-0 top-full z-[71] mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] rounded-lg p-3 text-xs italic leading-snug text-ink-dim shadow-xl md:hidden">
-                  {VARIANTS[state.settings.variant].description}
+                <div className="fixed inset-0 z-[70]" onClick={() => setShowVariantInfo(false)} />
+                <div className="absolute left-1/2 top-full z-[71] mt-1.5 w-56 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 sm:w-72">
+                  <div className="panel flex max-h-56 flex-col rounded-lg sm:max-h-72">
+                    <div className="flex items-center justify-between border-b border-brass/15 px-2.5 py-1.5 text-[11px] sm:px-3 sm:py-2 sm:text-xs">
+                      <span className="text-ink-dim">
+                        Blinds <span className="font-mono font-semibold text-ink">{state.settings.smallBlind}/{state.settings.bigBlind}</span>
+                      </span>
+                      <span className="text-ink-dim">
+                        Hand <span className="font-mono font-semibold text-ink">{state.game.handNumber}</span>
+                      </span>
+                    </div>
+                    <ul className="flex flex-col gap-1.5 overflow-y-auto p-2 sm:gap-2 sm:p-3">
+                      {VARIANT_LIST.map((v) => {
+                        const active = v.id === state.settings.variant;
+                        return (
+                          <li
+                            key={v.id}
+                            className={`rounded-lg p-1.5 ${active ? 'bg-brass/15 ring-1 ring-brass/40' : ''}`}
+                          >
+                            <div className="text-sm font-semibold text-ink sm:text-base">{v.name}</div>
+                            <p className="mt-0.5 text-[11px] leading-snug italic text-ink-dim sm:text-xs">
+                              {v.description}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 </div>
               </>
             )}
           </div>
-          <span className="text-xs text-ink-dim">
-            {state.settings.smallBlind}/{state.settings.bigBlind} · #{state.game.handNumber}
-          </span>
-          <span className="hidden max-w-md truncate text-xs italic text-ink-dim md:inline">
-            · {VARIANTS[state.settings.variant].description}
-          </span>
           {!connected && <span className="text-xs text-crimson">reconnecting…</span>}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
@@ -768,8 +789,7 @@ export default function GameRoom() {
           </button>
           {state.youAreHost && (
             <button onClick={() => setShowSettle(true)} className="btn btn-ghost px-2.5 py-1.5 text-sm sm:px-3">
-              <span className="sm:hidden">Payouts</span>
-              <span className="hidden sm:inline">Who pays who</span>
+              Payouts
             </button>
           )}
           {me && me.status === 'sittingout' ? (
